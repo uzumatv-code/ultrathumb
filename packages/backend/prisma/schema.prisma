@@ -1,0 +1,1006 @@
+// =============================================================================
+// ThumbForge AI — Prisma Schema (MySQL 8)
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TENANTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Tenant {
+  id        String       @id @default(uuid()) @db.VarChar(36)
+  name      String       @db.VarChar(255)
+  slug      String       @unique @db.VarChar(100)
+  status    TenantStatus @default(ACTIVE)
+  logoUrl   String?      @db.VarChar(500)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  users              User[]
+  subscriptions      Subscription[]
+  generationRequests GenerationRequest[]
+  payments           Payment[]
+  auditLogs          AuditLog[]
+  usageCounters      UsageCounter[]
+  quotaSnapshots     MonthlyQuotaSnapshot[]
+  savedModels        UserSavedModel[]
+  notifications      Notification[]
+  webhookEvents      WebhookEvent[]
+
+  @@index([status])
+  @@index([slug])
+  @@map("tenants")
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  TRIAL
+  CANCELLED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id                String     @id @default(uuid()) @db.VarChar(36)
+  tenantId          String     @db.VarChar(36)
+  name              String     @db.VarChar(255)
+  email             String     @db.VarChar(255)
+  passwordHash      String     @db.VarChar(255)
+  role              UserRole   @default(USER)
+  status            UserStatus @default(ACTIVE)
+  avatarUrl         String?    @db.VarChar(500)
+  emailVerifiedAt   DateTime?
+  emailVerifyToken  String?    @db.VarChar(255)
+  passwordResetToken String?   @db.VarChar(255)
+  passwordResetExpiresAt DateTime?
+  lastLoginAt       DateTime?
+  referralCode      String?    @unique @db.VarChar(20)
+  referredByUserId  String?    @db.VarChar(36)
+  metadata          Json?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  deletedAt         DateTime?
+
+  // Relations
+  tenant             Tenant              @relation(fields: [tenantId], references: [id])
+  referredBy         User?               @relation("Referrals", fields: [referredByUserId], references: [id])
+  referrals          User[]              @relation("Referrals")
+  refreshTokens      RefreshToken[]
+  generationRequests GenerationRequest[]
+  payments           Payment[]
+  auditLogs          AuditLog[]
+  savedModels        UserSavedModel[]
+  notifications      Notification[]
+  downloads          Download[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([email])
+  @@index([role])
+  @@index([status])
+  @@map("users")
+}
+
+enum UserRole {
+  SUPERADMIN
+  ADMIN
+  USER
+  VIEWER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTH — REFRESH TOKENS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model RefreshToken {
+  id         String    @id @default(uuid()) @db.VarChar(36)
+  userId     String    @db.VarChar(36)
+  tokenHash  String    @unique @db.VarChar(255)
+  sessionId  String    @db.VarChar(36)
+  ipAddress  String?   @db.VarChar(45)
+  userAgent  String?   @db.VarChar(500)
+  expiresAt  DateTime
+  usedAt     DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PLANS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Plan {
+  id                 String   @id @default(uuid()) @db.VarChar(36)
+  name               String   @db.VarChar(100)
+  description        String   @db.Text
+  priceCents         Int
+  generationsLimit   Int      @default(30)
+  isActive           Boolean  @default(true)
+  isFeatured         Boolean  @default(false)
+  sortOrder          Int      @default(0)
+  features           Json     // string[] of feature descriptions
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  // Relations
+  subscriptions Subscription[]
+
+  @@index([isActive])
+  @@map("plans")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUBSCRIPTIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Subscription {
+  id                  String             @id @default(uuid()) @db.VarChar(36)
+  tenantId            String             @db.VarChar(36)
+  planId              String             @db.VarChar(36)
+  status              SubscriptionStatus @default(PENDING)
+  currentPeriodStart  DateTime
+  currentPeriodEnd    DateTime
+  cancelledAt         DateTime?
+  cancellationReason  String?            @db.VarChar(500)
+  trialEndsAt         DateTime?
+  mpSubscriptionId    String?            @db.VarChar(100)
+  metadata            Json?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  // Relations
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  plan     Plan      @relation(fields: [planId], references: [id])
+  payments Payment[]
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([currentPeriodEnd])
+  @@map("subscriptions")
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+  TRIAL
+  PENDING
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI PROVIDERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AIProvider {
+  id                String         @id @default(uuid()) @db.VarChar(36)
+  name              String         @db.VarChar(100)
+  type              AIProviderType
+  isActive          Boolean        @default(true)
+  isFallback        Boolean        @default(false)
+  priority          Int            @default(0)
+  generationModel   String         @db.VarChar(100)
+  visionModel       String?        @db.VarChar(100)
+  maxTokens         Int            @default(4096)
+  timeoutMs         Int            @default(120000)
+  maxRetries        Int            @default(3)
+  costPer1kTokens   Decimal        @db.Decimal(10, 6) // input cost
+  costPerImage      Decimal        @db.Decimal(10, 6) // per generation
+  encryptedApiKey   String         @db.Text // AES-256 encrypted
+  encryptedOrgId    String?        @db.Text
+  additionalConfig  Json?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  // Relations
+  generationRequests GenerationRequest[]
+
+  @@index([isActive])
+  @@index([type])
+  @@map("ai_providers")
+}
+
+enum AIProviderType {
+  OPENAI
+  STABILITY
+  REPLICATE
+  CUSTOM
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEMPLATES
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Template {
+  id                 String            @id @default(uuid()) @db.VarChar(36)
+  name               String            @db.VarChar(255)
+  description        String            @db.Text
+  category           TemplateCategory
+  previewImageUrl    String?           @db.VarChar(500)
+  demoImageUrl       String?           @db.VarChar(500)
+  isPremium          Boolean           @default(false)
+  isActive           Boolean           @default(true)
+  isSystemTemplate   Boolean           @default(true)
+  sortOrder          Int               @default(0)
+  defaultStyleConfig Json              // StyleConfig object
+  defaultPromptHints String?           @db.Text
+  recommendedFonts   Json?             // string[]
+  tags               Json              // string[]
+  currentVersionId   String?           @db.VarChar(36)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  deletedAt          DateTime?
+
+  // Relations
+  versions           TemplateVersion[]
+  layers             TemplateLayer[]
+  generationRequests GenerationRequest[]
+
+  @@index([category])
+  @@index([isActive])
+  @@index([isPremium])
+  @@map("templates")
+}
+
+model TemplateVersion {
+  id                String   @id @default(uuid()) @db.VarChar(36)
+  templateId        String   @db.VarChar(36)
+  version           Int
+  changeDescription String?  @db.Text
+  styleConfig       Json
+  promptHints       String?  @db.Text
+  createdAt         DateTime @default(now())
+  createdById       String?  @db.VarChar(36)
+
+  template Template @relation(fields: [templateId], references: [id])
+
+  @@unique([templateId, version])
+  @@index([templateId])
+  @@map("template_versions")
+}
+
+enum TemplateCategory {
+  GAMER_FPS
+  BATTLE_ROYALE
+  MOBILE_GAME
+  UNBOXING
+  REACTION
+  TUTORIAL
+  CLICKBAIT_ENERGY
+  CLEAN_MINIMAL
+  CINEMATIC
+  CUSTOM
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USER SAVED MODELS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model UserSavedModel {
+  id                String          @id @default(uuid()) @db.VarChar(36)
+  tenantId          String          @db.VarChar(36)
+  userId            String          @db.VarChar(36)
+  name              String          @db.VarChar(255)
+  description       String?         @db.VarChar(500)
+  type              SavedModelType
+  previewImageUrl   String?         @db.VarChar(500)
+  styleConfig       Json
+  promptHints       String?         @db.Text
+  referenceAssetId  String?         @db.VarChar(36) // storage path reference
+  isFavorite        Boolean         @default(false)
+  usageCount        Int             @default(0)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  deletedAt         DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, userId])
+  @@index([type])
+  @@map("user_saved_models")
+}
+
+enum SavedModelType {
+  MODEL
+  PRESET
+  STYLE
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GENERATION REQUESTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model GenerationRequest {
+  id                    String            @id @default(uuid()) @db.VarChar(36)
+  tenantId              String            @db.VarChar(36)
+  userId                String            @db.VarChar(36)
+  templateId            String?           @db.VarChar(36)
+  savedModelId          String?           @db.VarChar(36)
+  aiProviderId          String?           @db.VarChar(36)
+  status                GenerationStatus  @default(QUEUED)
+  freeTextPrompt        String?           @db.Text
+  styleConfig           Json
+  structuredPromptJson  Json?             // ReferenceAnalysis + built prompt
+  referenceAnalysis     Json?             // ReferenceAnalysis object
+  finalPromptUsed       String?           @db.Text
+  errorMessage          String?           @db.Text
+  errorCode             String?           @db.VarChar(50)
+  retryCount            Int               @default(0)
+  queueJobId            String?           @db.VarChar(255)
+  queuedAt              DateTime          @default(now())
+  startedAt             DateTime?
+  completedAt           DateTime?
+  estimatedCostCents    Int?
+  actualCostCents       Int?
+  tokensUsed            Int?
+  modelUsed             String?           @db.VarChar(100)
+  durationMs            Int?
+  quotaCounted          Boolean           @default(true)
+  metadata              Json?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  // Relations
+  tenant     Tenant              @relation(fields: [tenantId], references: [id])
+  user       User                @relation(fields: [userId], references: [id])
+  template   Template?           @relation(fields: [templateId], references: [id])
+  aiProvider AIProvider?         @relation(fields: [aiProviderId], references: [id])
+  variants   GenerationVariant[]
+  assets     GenerationAsset[]
+  prompt     GenerationPrompt?
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([tenantId, createdAt])
+  @@map("generation_requests")
+}
+
+enum GenerationStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GENERATION VARIANTS (the 3 outputs)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model GenerationVariant {
+  id                      String        @id @default(uuid()) @db.VarChar(36)
+  generationId            String        @db.VarChar(36)
+  variantIndex            Int           // 1, 2, or 3
+  status                  VariantStatus @default(PENDING_PAYMENT)
+
+  // Storage paths
+  hdStoragePath           String?       @db.VarChar(500) // private bucket
+  previewStoragePath      String?       @db.VarChar(500) // public bucket
+  thumbnailStoragePath    String?       @db.VarChar(500) // public bucket
+
+  // Public URLs (preview only)
+  previewUrl              String?       @db.VarChar(500)
+  thumbnailUrl            String?       @db.VarChar(500)
+
+  // Quality scores
+  templateAdherenceScore  Int?          // 0-100
+  textReadabilityScore    Int?          // 0-100
+  visualImpactScore       Int?          // 0-100
+
+  // Payment
+  isPaid                  Boolean       @default(false)
+  paidAt                  DateTime?
+
+  revisedPrompt           String?       @db.Text
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  // Relations
+  generation GenerationRequest @relation(fields: [generationId], references: [id])
+  downloads  Download[]
+  paymentItems PaymentItem[]
+
+  @@unique([generationId, variantIndex])
+  @@index([generationId])
+  @@index([status])
+  @@index([isPaid])
+  @@map("generation_variants")
+}
+
+enum VariantStatus {
+  PENDING_PAYMENT
+  PAID
+  AVAILABLE
+  EXPIRED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GENERATION ASSETS (uploaded files)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model GenerationAsset {
+  id               String    @id @default(uuid()) @db.VarChar(36)
+  generationId     String    @db.VarChar(36)
+  type             AssetType
+  originalFilename String    @db.VarChar(255)
+  storagePath      String    @db.VarChar(500)
+  mimeType         String    @db.VarChar(100)
+  fileSizeBytes    Int
+  width            Int?
+  height           Int?
+  metadata         Json?
+  createdAt        DateTime  @default(now())
+
+  generation GenerationRequest @relation(fields: [generationId], references: [id])
+
+  @@index([generationId])
+  @@index([type])
+  @@map("generation_assets")
+}
+
+enum AssetType {
+  REFERENCE
+  PERSON
+  OBJECT
+  BACKGROUND
+  LOGO
+  BADGE
+  ICON
+  OTHER
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GENERATION PROMPTS (full audit trail of prompts)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model GenerationPrompt {
+  id                   String   @id @default(uuid()) @db.VarChar(36)
+  generationId         String   @unique @db.VarChar(36)
+  referenceAnalysisRaw Json?
+  structuredPromptJson Json
+  finalPrompt          String   @db.Text
+  systemPrompt         String?  @db.Text
+  promptVersion        String   @db.VarChar(20) @default("1.0")
+  createdAt            DateTime @default(now())
+
+  generation GenerationRequest @relation(fields: [generationId], references: [id])
+
+  @@index([generationId])
+  @@map("generation_prompts")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAYMENTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Payment {
+  id                String        @id @default(uuid()) @db.VarChar(36)
+  tenantId          String        @db.VarChar(36)
+  userId            String        @db.VarChar(36)
+  subscriptionId    String?       @db.VarChar(36)
+  type              PaymentType
+  method            PaymentMethod @default(PIX)
+  status            PaymentStatus @default(PENDING)
+  amountCents       Int
+  currency          String        @default("BRL") @db.VarChar(3)
+  description       String?       @db.VarChar(500)
+  idempotencyKey    String        @unique @db.VarChar(255)
+
+  // Mercado Pago
+  mpPaymentId       String?       @db.VarChar(100)
+  mpStatus          String?       @db.VarChar(50)
+  mpStatusDetail    String?       @db.VarChar(100)
+  mpExternalRef     String?       @db.VarChar(255)
+
+  // PIX
+  pixQrCode         String?       @db.Text
+  pixQrCodeText     String?       @db.Text
+  pixExpiresAt      DateTime?
+  pixTransactionId  String?       @db.VarChar(100)
+
+  // Timestamps
+  approvedAt        DateTime?
+  rejectedAt        DateTime?
+  cancelledAt       DateTime?
+  refundedAt        DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  metadata          Json?
+
+  // Relations
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  user         User          @relation(fields: [userId], references: [id])
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+  items        PaymentItem[]
+  webhookEvents WebhookEvent[]
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([status])
+  @@index([mpPaymentId])
+  @@index([createdAt])
+  @@map("payments")
+}
+
+enum PaymentType {
+  SUBSCRIPTION
+  SINGLE_VARIANT
+  COMBO_VARIANTS
+}
+
+enum PaymentMethod {
+  PIX
+  CREDIT_CARD
+  BOLETO
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  APPROVED
+  REJECTED
+  CANCELLED
+  REFUNDED
+  CHARGEBACK
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAYMENT ITEMS (what was purchased)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PaymentItem {
+  id          String  @id @default(uuid()) @db.VarChar(36)
+  paymentId   String  @db.VarChar(36)
+  variantId   String  @db.VarChar(36)
+  amountCents Int
+  description String? @db.VarChar(255)
+
+  payment Payment           @relation(fields: [paymentId], references: [id])
+  variant GenerationVariant @relation(fields: [variantId], references: [id])
+
+  @@unique([paymentId, variantId])
+  @@index([paymentId])
+  @@index([variantId])
+  @@map("payment_items")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WEBHOOK EVENTS (Mercado Pago)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model WebhookEvent {
+  id              String              @id @default(uuid()) @db.VarChar(36)
+  tenantId        String?             @db.VarChar(36)
+  paymentId       String?             @db.VarChar(36)
+  provider        String              @db.VarChar(50) @default("mercadopago")
+  eventType       String              @db.VarChar(100)
+  externalEventId String?             @db.VarChar(255)
+  status          WebhookEventStatus  @default(RECEIVED)
+  payload         Json
+  signatureValid  Boolean             @default(false)
+  processedAt     DateTime?
+  errorMessage    String?             @db.Text
+  retryCount      Int                 @default(0)
+  ipAddress       String?             @db.VarChar(45)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  tenant  Tenant?  @relation(fields: [tenantId], references: [id])
+  payment Payment? @relation(fields: [paymentId], references: [id])
+
+  @@index([provider])
+  @@index([eventType])
+  @@index([status])
+  @@index([externalEventId])
+  @@index([createdAt])
+  @@map("webhook_events")
+}
+
+enum WebhookEventStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
+  IGNORED
+  DUPLICATE
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOWNLOADS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Download {
+  id             String    @id @default(uuid()) @db.VarChar(36)
+  variantId      String    @db.VarChar(36)
+  userId         String    @db.VarChar(36)
+  paymentId      String    @db.VarChar(36)
+  downloadedAt   DateTime?
+  expiresAt      DateTime
+  signedUrlUsed  String?   @db.Text
+  ipAddress      String?   @db.VarChar(45)
+  userAgent      String?   @db.VarChar(500)
+  fileSizeBytes  Int?
+  createdAt      DateTime  @default(now())
+
+  variant GenerationVariant @relation(fields: [variantId], references: [id])
+  user    User              @relation(fields: [userId], references: [id])
+
+  @@index([variantId])
+  @@index([userId])
+  @@index([paymentId])
+  @@index([expiresAt])
+  @@map("downloads")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUDIT LOGS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id           String   @id @default(uuid()) @db.VarChar(36)
+  tenantId     String?  @db.VarChar(36)
+  userId       String?  @db.VarChar(36)
+  action       String   @db.VarChar(100)
+  resourceType String?  @db.VarChar(50)
+  resourceId   String?  @db.VarChar(36)
+  ipAddress    String?  @db.VarChar(45)
+  userAgent    String?  @db.VarChar(500)
+  requestId    String?  @db.VarChar(36)
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+  user   User?   @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([resourceType, resourceId])
+  @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USAGE COUNTERS (real-time quotas)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model UsageCounter {
+  id                 String   @id @default(uuid()) @db.VarChar(36)
+  tenantId           String   @db.VarChar(36)
+  periodYear         Int
+  periodMonth        Int
+  generationsUsed    Int      @default(0)
+  generationsLimit   Int      @default(30)
+  thumbsDownloaded   Int      @default(0)
+  estimatedCostCents Int      @default(0)
+  updatedAt          DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, periodYear, periodMonth])
+  @@index([tenantId])
+  @@map("usage_counters")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MONTHLY QUOTA SNAPSHOTS (immutable, for analytics)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model MonthlyQuotaSnapshot {
+  id                 String   @id @default(uuid()) @db.VarChar(36)
+  tenantId           String   @db.VarChar(36)
+  periodYear         Int
+  periodMonth        Int
+  generationsUsed    Int
+  generationsLimit   Int
+  thumbsPurchased    Int
+  thumbsDownloaded   Int
+  revenueFromThumbs  Int      // cents
+  subscriptionRevenue Int     // cents
+  estimatedAICost    Int      // cents
+  snapshotAt         DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, periodYear, periodMonth])
+  @@index([tenantId])
+  @@index([periodYear, periodMonth])
+  @@map("monthly_quota_snapshots")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Notification {
+  id        String           @id @default(uuid()) @db.VarChar(36)
+  tenantId  String           @db.VarChar(36)
+  userId    String           @db.VarChar(36)
+  type      NotificationType
+  title     String           @db.VarChar(255)
+  body      String           @db.Text
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  data      Json?
+  createdAt DateTime         @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, userId])
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+enum NotificationType {
+  GENERATION_COMPLETE
+  GENERATION_FAILED
+  PAYMENT_APPROVED
+  PAYMENT_REJECTED
+  DOWNLOAD_READY
+  SUBSCRIPTION_EXPIRING
+  QUOTA_WARNING
+  SYSTEM
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE FLAGS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model FeatureFlag {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  key         String   @unique @db.VarChar(100)
+  value       String   @db.Text          // JSON string for complex values
+  description String?  @db.VarChar(500)
+  isEnabled   Boolean  @default(true)
+  updatedById String?  @db.VarChar(36)
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@index([key])
+  @@index([isEnabled])
+  @@map("feature_flags")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SYSTEM SETTINGS (key-value store)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model SystemSetting {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  category    String   @db.VarChar(50)
+  key         String   @db.VarChar(100)
+  value       String   @db.Text
+  valueType   String   @db.VarChar(20) @default("string") // string, number, boolean, json
+  description String?  @db.VarChar(500)
+  isSecret    Boolean  @default(false)
+  updatedById String?  @db.VarChar(36)
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@unique([category, key])
+  @@index([category])
+  @@map("system_settings")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// JOBS (BullMQ job tracking in DB for visibility)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Job {
+  id          String    @id @default(uuid()) @db.VarChar(36)
+  queueName   String    @db.VarChar(100)
+  jobId       String    @db.VarChar(255)
+  type        String    @db.VarChar(100)
+  status      JobStatus @default(WAITING)
+  payload     Json
+  result      Json?
+  error       String?   @db.Text
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3)
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([queueName, jobId])
+  @@index([queueName])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+  @@map("jobs")
+}
+
+enum JobStatus {
+  WAITING
+  ACTIVE
+  COMPLETED
+  FAILED
+  DELAYED
+  STALLED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REFERENCE ANALYSES (persisted Vision API results)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ReferenceAnalysis {
+  id               String   @id @default(uuid()) @db.VarChar(36)
+  tenantId         String   @db.VarChar(36)
+  generationId     String?  @db.VarChar(36)
+  storagePath      String?  @db.VarChar(500)
+  layout           String   @db.VarChar(50)
+  personPosition   String?  @db.VarChar(50)
+  backgroundType   String   @db.VarChar(50)
+  dominantColors   Json     // string[]
+  glowIntensity    String   @db.VarChar(20)
+  style            String   @db.VarChar(50)
+  hasText          Boolean  @default(false)
+  textHierarchy    String?  @db.VarChar(50)
+  hasCTA           Boolean  @default(false)
+  thumbnailStyle   String   @db.VarChar(50)
+  confidenceScore  Float    @default(0.0)
+  // Extended DNA fields
+  visualHierarchy  String?  @db.VarChar(50)
+  facialEmotion    String?  @db.VarChar(50)
+  secondaryColor   String?  @db.VarChar(20)
+  lightingStyle    String?  @db.VarChar(50)
+  depth            String?  @db.VarChar(20)
+  visualDensity    String?  @db.VarChar(20)
+  legibilityScore  Int?
+  visualEnergy     String?  @db.VarChar(20)
+  semanticTheme    String?  @db.VarChar(100)
+  textSafeZone     String?  @db.VarChar(20)
+  detectedObjects  Json?    // string[]
+  subjectScale     String?  @db.VarChar(20)
+  styleKeywords    Json?    // string[]
+  objectsPosition  Json?    // string[]
+  rawJson          Json     // full raw analysis from Vision API
+  modelUsed        String   @db.VarChar(100) @default("gpt-4o")
+  createdAt        DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([generationId])
+  @@map("reference_analyses")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EDIT OPERATIONS (semantic edit history)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model EditOperation {
+  id                  String          @id @default(uuid()) @db.VarChar(36)
+  tenantId            String          @db.VarChar(36)
+  userId              String          @db.VarChar(36)
+  sourceGenerationId  String          @db.VarChar(36)
+  baseVariantId       String?         @db.VarChar(36)
+  resultGenerationId  String?         @db.VarChar(36)
+  status              EditOpStatus    @default(DRAFT)
+  promptText          String          @db.Text
+  preserveList        Json            // SemanticEditPreserve[]
+  changeSet           Json            // SemanticEditChangeSet
+  promptDelta         Json            // string[]
+  previewSummary      String          @db.VarChar(500)
+  appliedAt           DateTime?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@index([tenantId])
+  @@index([sourceGenerationId])
+  @@index([resultGenerationId])
+  @@index([userId])
+  @@map("edit_operations")
+}
+
+enum EditOpStatus {
+  DRAFT
+  COMMITTED
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXPORT JOBS (post-processing pipeline tracking)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ExportJob {
+  id              String          @id @default(uuid()) @db.VarChar(36)
+  tenantId        String          @db.VarChar(36)
+  userId          String          @db.VarChar(36)
+  variantId       String          @db.VarChar(36)
+  status          ExportJobStatus @default(PENDING)
+  options         Json            // ExportOptions
+  outputPath      String?         @db.VarChar(500)
+  outputUrl       String?         @db.VarChar(500)
+  fileSizeBytes   Int?
+  errorMessage    String?         @db.Text
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([tenantId])
+  @@index([variantId])
+  @@index([status])
+  @@map("export_jobs")
+}
+
+enum ExportJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEMPLATE LAYERS (layer composition for templates)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TemplateLayer {
+  id            String      @id @default(uuid()) @db.VarChar(36)
+  templateId    String      @db.VarChar(36)
+  name          String      @db.VarChar(100)
+  type          LayerType
+  zIndex        Int         @default(0)
+  x             Float       @default(0)
+  y             Float       @default(0)
+  width         Float?
+  height        Float?
+  opacity       Float       @default(1.0)
+  blendMode     String      @db.VarChar(30) @default("normal")
+  isVisible     Boolean     @default(true)
+  isLocked      Boolean     @default(false)
+  config        Json        // layer-specific config (text, image, shape, etc.)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@index([zIndex])
+  @@map("template_layers")
+}
+
+enum LayerType {
+  BACKGROUND
+  IMAGE
+  TEXT
+  SHAPE
+  OVERLAY
+  SUBJECT
+  OBJECT
+  GLOW
+}

@@ -1,0 +1,152 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-bg: theme('colors.surface.950');
+    --color-surface: theme('colors.surface.900');
+    --color-surface-2: theme('colors.surface.800');
+    --color-brand: theme('colors.brand.500');
+    --color-brand-hover: theme('colors.brand.600');
+    --color-text: theme('colors.slate.100');
+    --color-text-muted: theme('colors.slate.400');
+    --color-border: theme('colors.slate.700');
+  }
+
+  * {
+    @apply border-slate-700;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-surface-950 text-slate-100 font-sans;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-surface-900;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-600 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-500;
+  }
+
+  /* Selection */
+  ::selection {
+    @apply bg-brand-500/30 text-brand-100;
+  }
+}
+
+@layer components {
+  /* Glass card effect */
+  .glass-card {
+    @apply bg-surface-900/80 backdrop-blur-sm border border-slate-700/50 rounded-2xl;
+  }
+
+  .glass-card-hover {
+    @apply glass-card hover:bg-surface-800/80 hover:border-slate-600/50 transition-all duration-200;
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-brand-400 to-purple-400 bg-clip-text text-transparent;
+  }
+
+  .gradient-text-gamer {
+    @apply bg-gradient-to-r from-cyan-400 via-brand-400 to-purple-500 bg-clip-text text-transparent;
+  }
+
+  /* Button variants */
+  .btn-primary {
+    @apply bg-brand-500 hover:bg-brand-600 text-white font-semibold px-6 py-2.5
+           rounded-xl transition-all duration-200 shadow-glow-sm hover:shadow-glow
+           active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none;
+  }
+
+  .btn-secondary {
+    @apply bg-surface-800 hover:bg-surface-700 text-slate-200 font-semibold px-6 py-2.5
+           border border-slate-600 hover:border-slate-500 rounded-xl transition-all duration-200
+           active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-ghost {
+    @apply hover:bg-surface-800 text-slate-400 hover:text-slate-200 font-medium px-4 py-2
+           rounded-lg transition-all duration-200 active:scale-95;
+  }
+
+  .btn-danger {
+    @apply bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 font-semibold px-6 py-2.5
+           border border-red-500/30 hover:border-red-500/50 rounded-xl transition-all duration-200
+           active:scale-95;
+  }
+
+  /* Input */
+  .input {
+    @apply bg-surface-800 border border-slate-600 focus:border-brand-500 text-slate-100
+           placeholder:text-slate-500 rounded-xl px-4 py-3 w-full outline-none
+           transition-all duration-200 focus:shadow-glow-sm;
+  }
+
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium;
+  }
+
+  .badge-success { @apply badge bg-emerald-500/15 text-emerald-400 border border-emerald-500/20; }
+  .badge-warning { @apply badge bg-amber-500/15 text-amber-400 border border-amber-500/20; }
+  .badge-error { @apply badge bg-red-500/15 text-red-400 border border-red-500/20; }
+  .badge-info { @apply badge bg-blue-500/15 text-blue-400 border border-blue-500/20; }
+  .badge-brand { @apply badge bg-brand-500/15 text-brand-400 border border-brand-500/20; }
+  .badge-neutral { @apply badge bg-slate-700 text-slate-300; }
+
+  /* Glow effects */
+  .glow-purple { box-shadow: 0 0 30px rgba(139, 92, 246, 0.4); }
+  .glow-blue { box-shadow: 0 0 30px rgba(59, 130, 246, 0.4); }
+  .glow-green { box-shadow: 0 0 30px rgba(16, 185, 129, 0.4); }
+
+  /* Preview protection overlay */
+  .preview-protected {
+    @apply relative overflow-hidden select-none;
+    user-select: none;
+    -webkit-user-select: none;
+    pointer-events: none;
+  }
+
+  /* Page layout */
+  .page-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  .section-title {
+    @apply text-2xl font-display font-bold text-slate-100;
+  }
+
+  .section-subtitle {
+    @apply text-slate-400 mt-1;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}

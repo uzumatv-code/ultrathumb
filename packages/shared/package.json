@@ -1,0 +1,23 @@
+{
+  "name": "@thumbforge/shared",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared TypeScript types and utilities for ThumbForge AI",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "type-check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

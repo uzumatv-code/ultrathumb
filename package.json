@@ -1,0 +1,35 @@
+{
+  "name": "thumbforge-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ThumbForge AI - SaaS para criação de thumbnails com IA",
+  "scripts": {
+    "dev": "pnpm --filter @thumbforge/shared build && concurrently -k -n shared,backend,worker,frontend \"pnpm --filter @thumbforge/shared dev\" \"pnpm --filter @thumbforge/backend dev\" \"pnpm --filter @thumbforge/backend worker:dev\" \"pnpm --filter @thumbforge/frontend dev\"",
+    "build": "turbo run build",
+    "start": "npm run build && concurrently -k -n backend,worker,frontend \"pnpm --filter @thumbforge/backend start\" \"pnpm --filter @thumbforge/backend worker:start\" \"pnpm --filter @thumbforge/frontend start\"",
+    "lint": "turbo run lint",
+    "type-check": "turbo run type-check",
+    "test": "turbo run test",
+    "db:generate": "pnpm --filter @thumbforge/backend db:generate",
+    "db:migrate": "pnpm --filter @thumbforge/backend db:migrate",
+    "db:migrate:dev": "pnpm --filter @thumbforge/backend db:migrate:dev",
+    "db:push": "pnpm --filter @thumbforge/backend db:push",
+    "db:status": "pnpm --filter @thumbforge/backend db:status",
+    "db:seed": "pnpm --filter @thumbforge/backend db:seed",
+    "db:setup": "npm run db:migrate && npm run db:seed",
+    "db:studio": "pnpm --filter @thumbforge/backend db:studio"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.18.0",
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.3"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

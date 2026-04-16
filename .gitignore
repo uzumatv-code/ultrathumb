@@ -1,0 +1,40 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+dist
+build
+.next
+out
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Turbo
+.turbo
+
+# Prisma
+packages/backend/prisma/migrations/*.sql
+
+# Test coverage
+coverage
+
+# Uploads (local dev)
+uploads

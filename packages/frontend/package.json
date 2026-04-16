@@ -1,0 +1,46 @@
+{
+  "name": "@thumbforge/frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 3000",
+    "build": "tsc -b && vite build",
+    "start": "vite preview --host 0.0.0.0 --port 3000",
+    "preview": "vite preview",
+    "lint": "eslint src --ext ts,tsx",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@thumbforge/shared": "workspace:*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.1.5",
+    "@tanstack/react-query": "^5.65.1",
+    "@tanstack/react-query-devtools": "^5.65.1",
+    "zustand": "^5.0.3",
+    "axios": "^1.7.9",
+    "react-konva": "^19.0.2",
+    "konva": "^9.3.18",
+    "react-dropzone": "^14.3.5",
+    "react-hot-toast": "^2.5.1",
+    "lucide-react": "^0.475.0",
+    "qrcode.react": "^4.2.0",
+    "date-fns": "^4.1.0",
+    "socket.io-client": "^4.8.1",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^2.6.0",
+    "framer-motion": "^11.18.0"
+  },
+  "devDependencies": {
+    "@thumbforge/shared": "workspace:*",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.11"
+  }
+}
