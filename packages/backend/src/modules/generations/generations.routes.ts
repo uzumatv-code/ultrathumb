@@ -9,7 +9,9 @@ import {
   type UploadedGenerationFile,
 } from './generations.service.js';
 import { GenerationCreativeService } from './generation-creative.service.js';
+import { ThumbnailWorkflowService } from './thumbnail-workflow.service.js';
 import { authenticate } from '../../shared/middlewares/authenticate.js';
+import { VariantType } from '@thumbforge/shared';
 
 const styleConfigSchema = z.object({
   fontFamily: z.string().optional(),
@@ -27,6 +29,15 @@ const styleConfigSchema = z.object({
   glowColor: z.string().optional(),
   dominantColors: z.array(z.string()).optional(),
   visualStyle: z.enum(['gamer', 'cinematic', 'clean', 'high-energy', 'dramatic', 'minimal']).optional(),
+  workflowMode: z.enum(['reference', 'template', 'editor']).optional(),
+  dominantColor: z.string().optional(),
+  game: z.string().max(100).optional(),
+  videoType: z.string().max(100).optional(),
+  emotion: z.string().max(100).optional(),
+  mainObject: z.string().max(100).optional(),
+  facecamStyle: z.string().max(100).optional(),
+  realismGoal: z.enum(['maintain', 'realistic', 'punchier']).optional(),
+  templateLayoutId: z.string().max(100).optional(),
 });
 
 const listQuerySchema = z.object({
@@ -55,11 +66,30 @@ const semanticDraftBodySchema = z.object({
   preserve: z.array(semanticPreserveSchema).optional(),
 });
 
+const variantTypesSchema = z.array(z.nativeEnum(VariantType)).min(1).max(6);
+
+const templateModeInputSchema = z.object({
+  game: z.string().min(2).max(100),
+  videoType: z.string().min(2).max(100),
+  emotion: z.string().min(2).max(100),
+  mainObject: z.string().min(2).max(100),
+  text: z.string().max(120).optional(),
+  dominantColor: z.string().min(2).max(30),
+  facecamStyle: z.string().min(2).max(100),
+});
+
 export async function generationsRoutes(fastify: FastifyInstance): Promise<void> {
   const service = new GenerationsService();
   const creativeService = new GenerationCreativeService();
+  const workflowService = new ThumbnailWorkflowService();
 
   fastify.addHook('preHandler', authenticate);
+
+  fastify.post('/template-layouts', async (request, reply) => {
+    const input = templateModeInputSchema.parse(request.body);
+    const layouts = workflowService.generateTemplateLayouts(input);
+    return reply.send({ success: true, data: layouts });
+  });
 
   fastify.post('/', async (request, reply) => {
     const parts = request.parts();
@@ -92,6 +122,18 @@ export async function generationsRoutes(fastify: FastifyInstance): Promise<void>
     const styleConfig = fields['styleConfig']
       ? styleConfigSchema.parse(JSON.parse(fields['styleConfig']))
       : {};
+    const variantTypes = fields['variantTypes']
+      ? variantTypesSchema.parse(JSON.parse(fields['variantTypes']))
+      : undefined;
+    const workflowMode = fields['workflowMode']
+      ? z.enum(['reference', 'template', 'editor']).parse(fields['workflowMode'])
+      : undefined;
+    const templateModeInput = fields['templateModeInput']
+      ? templateModeInputSchema.parse(JSON.parse(fields['templateModeInput']))
+      : undefined;
+    const selectedLayoutIds = fields['selectedLayoutIds']
+      ? z.array(z.string().min(1).max(100)).min(1).max(4).parse(JSON.parse(fields['selectedLayoutIds']))
+      : undefined;
 
     const generation = await service.createGeneration({
       tenantId: request.tenantId,
@@ -100,6 +142,10 @@ export async function generationsRoutes(fastify: FastifyInstance): Promise<void>
       savedModelId: fields['savedModelId'],
       freeTextPrompt: fields['freeTextPrompt'],
       styleConfig,
+      variantTypes,
+      workflowMode,
+      templateModeInput,
+      selectedLayoutIds,
       files: {
         reference: files['reference'],
         person: files['person'],

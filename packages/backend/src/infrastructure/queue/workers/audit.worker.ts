@@ -6,8 +6,7 @@ import { Worker } from 'bullmq';
 import { getBullRedisOptions } from '../../cache/redis.js';
 import { prisma } from '../../database/client.js';
 import { logger } from '../../../shared/utils/logger.js';
-import { QUEUE_NAMES } from '../queues/index.js';
-import type { AuditWriteJobData } from '../queues/index.js';
+import { QUEUE_NAMES, type AuditWriteJobData } from '../queues/contracts.js';
 
 export const auditWriteWorker = new Worker<AuditWriteJobData>(
   QUEUE_NAMES.AUDIT_WRITE,

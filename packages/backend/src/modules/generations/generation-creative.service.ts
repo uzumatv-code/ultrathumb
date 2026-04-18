@@ -424,11 +424,12 @@ export class GenerationCreativeService {
       suggestions,
       recommendedPreserveOptions: ['layout', 'lighting', 'palette'],
       quickEditPrompts: [
-        'deixa mais clean',
-        'deixa o rosto maior',
-        'mais estilo YouTube viral',
+        'deixa a arma maior',
         'troca o fundo',
-        'adiciona texto forte',
+        'deixa mais parecido com CS',
+        'remove excesso de neon',
+        'deixa menos artificial',
+        'destaca mais o inimigo',
       ],
     };
   }

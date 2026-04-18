@@ -6,8 +6,7 @@ import { Worker } from 'bullmq';
 import { getBullRedisOptions } from '../../cache/redis.js';
 import { PaymentsService } from '../../../modules/payments/payments.service.js';
 import { logger } from '../../../shared/utils/logger.js';
-import { QUEUE_NAMES } from '../queues/index.js';
-import type { PaymentWebhookJobData } from '../queues/index.js';
+import { QUEUE_NAMES, type PaymentWebhookJobData } from '../queues/contracts.js';
 
 const paymentsService = new PaymentsService();
 

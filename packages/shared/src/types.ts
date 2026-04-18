@@ -187,6 +187,15 @@ export interface StyleConfig {
   glowColor?: string | undefined;
   dominantColors?: string[] | undefined;
   visualStyle?: VisualStyle | undefined;
+  workflowMode?: GenerationWorkflowMode | undefined;
+  dominantColor?: string | undefined;
+  game?: string | undefined;
+  videoType?: string | undefined;
+  emotion?: string | undefined;
+  mainObject?: string | undefined;
+  facecamStyle?: string | undefined;
+  realismGoal?: 'maintain' | 'realistic' | 'punchier' | undefined;
+  templateLayoutId?: string | undefined;
 }
 
 export type TextPosition =
@@ -196,6 +205,8 @@ export type TextPosition =
 
 export type VisualStyle =
   | 'gamer' | 'cinematic' | 'clean' | 'high-energy' | 'dramatic' | 'minimal';
+
+export type GenerationWorkflowMode = 'reference' | 'template' | 'editor';
 
 // ─── Template Types ────────────────────────────────────────────────────────
 
@@ -384,6 +395,122 @@ export interface ReferenceAnalysisFull extends ReferenceAnalysis {
   detectedObjects: string[];
   subjectScale: 'small' | 'medium' | 'large';
   styleKeywords: string[];
+  compositionType?: ReferenceCompositionType | undefined;
+  dominantObject?: string | null | undefined;
+  dominantObjectPosition?: string | null | undefined;
+  primaryColor?: string | null | undefined;
+  saturationLevel?: ReferenceSaturationLevel | undefined;
+  outlineStyle?: ReferenceOutlineStyle | undefined;
+  facialEmotionIntensity?: ReferenceEmotionIntensity | undefined;
+  facecamDetected?: boolean | undefined;
+  facecamPosition?: FacecamPosition | undefined;
+  facecamStyle?: FacecamStyleOption | undefined;
+  enemyDetected?: boolean | undefined;
+  enemyPosition?: 'left' | 'right' | 'center' | 'none' | undefined;
+  realismLevel?: ReferenceRealismLevel | undefined;
+  oneSecondReadability?: ReferenceReadabilityLevel | undefined;
+  genericPosterArtRisk?: 'low' | 'medium' | 'high' | undefined;
+  foregroundFocus?: string | null | undefined;
+  midgroundFocus?: string | null | undefined;
+  backgroundFocus?: string | null | undefined;
+}
+
+export type ReferenceCompositionType =
+  | 'central'
+  | 'diagonal'
+  | 'first-person'
+  | 'split'
+  | 'facecam-overlay';
+
+export type ReferenceSaturationLevel = 'low' | 'medium' | 'high';
+export type ReferenceOutlineStyle = 'none' | 'clean' | 'thick' | 'neon' | 'comic';
+export type ReferenceEmotionIntensity = 'low' | 'medium' | 'high';
+export type ReferenceRealismLevel = 'stylized' | 'hybrid' | 'realistic';
+export type ReferenceReadabilityLevel = 'weak' | 'good' | 'excellent';
+export type FacecamPosition =
+  | 'top-left'
+  | 'top-right'
+  | 'bottom-left'
+  | 'bottom-right'
+  | 'none';
+export type FacecamStyleOption = 'clean' | 'neon' | 'cutout' | 'rounded' | 'none';
+export type ReferenceTextHierarchy = 'none' | 'title-only' | 'title-subtitle' | 'multiple';
+
+export interface VisualCTRScore {
+  impact: number;
+  clarity: number;
+  style: number;
+  legibility: number;
+  referenceSimilarity: number;
+}
+
+export interface OneSecondTestResult {
+  passes: boolean;
+  explanation: string;
+}
+
+export interface ReferenceAutoExtraction {
+  compositionType: ReferenceCompositionType;
+  dominantObject: string;
+  dominantObjectPosition: string;
+  primaryColor: string;
+  saturationLevel: ReferenceSaturationLevel;
+  glowLevel: ReferenceAnalysisFull['glowIntensity'];
+  outlineStyle: ReferenceOutlineStyle;
+  facialEmotionIntensity: ReferenceEmotionIntensity;
+  visualDensity: ReferenceAnalysisFull['visualDensity'];
+  textHierarchy: ReferenceTextHierarchy;
+  facecamPosition: FacecamPosition;
+  facecamStyle: FacecamStyleOption;
+  depth: ReferenceAnalysisFull['depth'];
+  foregroundFocus: string;
+  midgroundFocus: string;
+  backgroundFocus: string;
+}
+
+export interface ReferenceGuidedFlow {
+  detections: string[];
+  questions: string[];
+  preserveOptions: string[];
+  autoExtraction: ReferenceAutoExtraction;
+  visualScoring: VisualCTRScore;
+  oneSecondTest: OneSecondTestResult;
+}
+
+export interface ReferenceAnalysisResponse {
+  analysis: ReferenceAnalysisFull;
+  guidedFlow: ReferenceGuidedFlow;
+}
+
+export interface TemplateIntelligenceInput {
+  game: string;
+  videoType: string;
+  emotion: string;
+  mainObject: string;
+  text?: string | undefined;
+  dominantColor: string;
+  facecamStyle: string;
+}
+
+export interface TemplateLayoutSuggestion {
+  id: string;
+  name: string;
+  hook: string;
+  description: string;
+  compositionType: ReferenceCompositionType;
+  textZone: TextPosition;
+  facecamPosition: FacecamPosition;
+  visualPriority: string[];
+  ctrReasoning: string;
+  score: number;
+  recommendedVariantType: VariantType;
+  styleConfigPatch: Partial<StyleConfig>;
+  freeTextDirective: string;
+}
+
+export interface TemplateLayoutResponse {
+  input: TemplateIntelligenceInput;
+  layouts: TemplateLayoutSuggestion[];
 }
 
 // ─── Prompt Builder ────────────────────────────────────────────────────────

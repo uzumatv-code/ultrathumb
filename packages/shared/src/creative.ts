@@ -1,4 +1,11 @@
-import type { ReferenceAnalysis, StyleConfig, VisualStyle } from './types.js';
+import type {
+  OneSecondTestResult,
+  ReferenceAnalysis,
+  ReferenceGuidedFlow,
+  StyleConfig,
+  VisualCTRScore,
+  VisualStyle,
+} from './types.js';
 
 export type VisualDensityLevel = 'clean' | 'balanced' | 'dense';
 export type LightingStyle = 'flat' | 'studio' | 'dramatic' | 'ambient' | 'neon';
@@ -56,6 +63,7 @@ export interface CreativeSuggestion {
 
 export interface SemanticEditChangeSet {
   subject?: 'keep' | 'replace' | 'enhance' | undefined;
+  facecam?: 'keep' | 'replace_face' | 'more_expressive' | 'change_style' | undefined;
   facialExpression?:
     | 'keep'
     | 'more_shocked'
@@ -70,6 +78,11 @@ export interface SemanticEditChangeSet {
   subjectScale?: 'keep' | 'smaller' | 'larger' | undefined;
   glowIntensity?: 'keep' | 'lower' | 'higher' | undefined;
   objectFocus?: 'keep' | 'increase' | 'decrease' | undefined;
+  heroObject?: 'keep' | 'replace' | 'bigger' | 'highlight' | undefined;
+  enemyFocus?: 'keep' | 'increase' | 'decrease' | undefined;
+  mapStyle?: 'keep' | 'replace' | 'more_authentic' | undefined;
+  realism?: 'keep' | 'less_artificial' | 'more_realistic' | 'more_stylized' | undefined;
+  brandChannelStyle?: 'keep' | 'bigger_channel' | undefined;
   textTreatment?: 'keep' | 'add' | 'remove' | 'refine' | undefined;
   styleDirective?:
     | 'keep'
@@ -108,4 +121,7 @@ export interface GenerationCreativeSummary {
   suggestions: CreativeSuggestion[];
   recommendedPreserveOptions: SemanticEditPreserve[];
   quickEditPrompts: string[];
+  visualScoring?: VisualCTRScore | undefined;
+  oneSecondTest?: OneSecondTestResult | undefined;
+  guidedFlow?: ReferenceGuidedFlow | undefined;
 }

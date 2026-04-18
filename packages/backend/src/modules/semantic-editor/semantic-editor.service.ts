@@ -36,11 +36,17 @@ export function parseSemanticCommand(
 
   const change: SemanticEditChangeSet = {
     subject:          'keep',
+    facecam:          'keep',
     visualDensity:    'keep',
     background:       'keep',
     subjectScale:     'keep',
     glowIntensity:    'keep',
     objectFocus:      'keep',
+    heroObject:       'keep',
+    enemyFocus:       'keep',
+    mapStyle:         'keep',
+    realism:          'keep',
+    brandChannelStyle:'keep',
     textTreatment:    'keep',
     styleDirective:   'keep',
     compositionLock:  'preserve',
@@ -51,11 +57,19 @@ export function parseSemanticCommand(
   // Subject
   if (/(troca|substitui|replace).*(pessoa|rosto|subject)/.test(lower)) {
     change.subject = 'replace';
+    change.facecam = 'replace_face';
     delta.push('replace subject while preserving composition');
   }
   if (/(melhora|enhance).*(pessoa|rosto|subject)/.test(lower)) {
     change.subject = 'enhance';
     delta.push('enhance subject quality');
+  }
+  if (/(express[aã]o|expressiv|facecam)/.test(lower) && /(aumenta|mais|stronger|bigger)/.test(lower)) {
+    change.facecam = 'more_expressive';
+    if (change.facialExpression === 'keep' || !change.facialExpression) {
+      change.facialExpression = 'more_excited';
+    }
+    delta.push('increase facecam expression and facial intensity');
   }
 
   // Scale
@@ -170,6 +184,48 @@ export function parseSemanticCommand(
   if (/(destaca|highlight|item principal|faca|weapon|objeto principal|arma)/.test(lower)) {
     change.objectFocus = 'increase';
     delta.push('increase focus on the main object');
+  }
+  if (/(arma maior|weapon bigger|arma grande)/.test(lower)) {
+    change.heroObject = 'bigger';
+    change.objectFocus = 'increase';
+    delta.push('make the main weapon larger');
+  } else if (/(troca a arma|muda a arma|replace.*weapon|swap.*weapon)/.test(lower)) {
+    change.heroObject = 'replace';
+    change.objectFocus = 'increase';
+    delta.push('replace the main weapon while preserving the layout');
+  }
+  if (/(destaca.*inimigo|enemy|oponente)/.test(lower)) {
+    change.enemyFocus = 'increase';
+    delta.push('increase enemy emphasis');
+  }
+  if (/(troca o mapa|muda o mapa|outro mapa|replace.*map)/.test(lower)) {
+    change.mapStyle = 'replace';
+    change.background = 'replace';
+    delta.push('replace the map or background theme');
+  }
+  if (/(parecido com cs|mais cs|counter.?strike|parecer cs)/.test(lower)) {
+    change.mapStyle = 'more_authentic';
+    if (change.styleDirective === 'keep') change.styleDirective = 'more_gaming';
+    delta.push('push the image closer to Counter-Strike visual language');
+  }
+  if (/(menos artificial|less artificial)/.test(lower)) {
+    change.realism = 'less_artificial';
+    change.glowIntensity = 'lower';
+    if (change.styleDirective === 'keep') change.styleDirective = 'more_clean';
+    delta.push('reduce artificial rendering and polish the realism');
+  } else if (/(mais realista|more realistic|realista)/.test(lower)) {
+    change.realism = 'more_realistic';
+    delta.push('increase realism and reduce synthetic artifacts');
+  }
+  if (/(mais chamativa|mais click|mais clic[aá]vel|thumbnail de canal grande|canal grande|big channel)/.test(lower)) {
+    change.brandChannelStyle = 'bigger_channel';
+    if (change.styleDirective === 'keep') change.styleDirective = 'more_viral';
+    delta.push('make it feel like a larger high-CTR gaming channel thumbnail');
+  }
+  if (/(remove excesso de neon|menos neon|sem neon|tira o neon)/.test(lower)) {
+    change.glowIntensity = 'lower';
+    if (change.styleDirective === 'keep') change.styleDirective = 'more_clean';
+    delta.push('reduce neon excess and clean the finish');
   }
 
   // Composition rebalance
@@ -346,8 +402,8 @@ export class SemanticEditorService {
         });
       }, 0);
     } else {
-      const { generationAiQueue } = await import('../../infrastructure/queue/queues/index.js');
-      await generationAiQueue.add(
+      const { getGenerationAiQueue } = await import('../../infrastructure/queue/queues/index.js');
+      await getGenerationAiQueue().add(
         'generate',
         { generationId: newGen.id, tenantId, userId },
         { priority: 2 },
@@ -405,6 +461,40 @@ export class SemanticEditorService {
         more_dramatic: 'dramatic',
       };
       patched['visualStyle'] = styleMap[change.styleDirective] ?? patched['visualStyle'];
+    }
+    if (change.facecam === 'replace_face') {
+      patched['facecamMode'] = 'replace-face';
+    }
+    if (change.facecam === 'more_expressive') {
+      patched['facecamExpression'] = 'high';
+    }
+    if (change.heroObject === 'bigger') {
+      patched['mainObjectScale'] = 'large';
+      patched['mainObjectFocus'] = 'high';
+    }
+    if (change.heroObject === 'replace') {
+      patched['mainObjectAction'] = 'replace';
+    }
+    if (change.enemyFocus === 'increase') {
+      patched['enemyFocus'] = 'high';
+    }
+    if (change.mapStyle === 'replace') {
+      patched['mapTheme'] = 'replace';
+    }
+    if (change.mapStyle === 'more_authentic') {
+      patched['gameAuthenticity'] = 'high';
+      patched['visualStyle'] = 'gamer';
+    }
+    if (change.realism === 'less_artificial' || change.realism === 'more_realistic') {
+      patched['renderIntent'] = 'realistic';
+      patched['glowIntensity'] = Math.max(0, Number(patched['glowIntensity'] ?? 45) - 10);
+    }
+    if (change.realism === 'more_stylized') {
+      patched['renderIntent'] = 'stylized';
+    }
+    if (change.brandChannelStyle === 'bigger_channel') {
+      patched['polishLevel'] = 'high';
+      patched['visualStyle'] = 'high-energy';
     }
 
     return patched;

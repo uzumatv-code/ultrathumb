@@ -38,7 +38,7 @@ async function startWorkers() {
     { generationAiWorker },
     { paymentWebhookWorker },
     { auditWriteWorker },
-    { paymentReconcileQueue },
+    { getPaymentReconcileQueue },
   ] = await Promise.all([
     import('../infrastructure/queue/workers/generation.worker.js'),
     import('../infrastructure/queue/workers/webhook.worker.js'),
@@ -57,7 +57,7 @@ async function startWorkers() {
 
   reconcileJob = new CronJob('0 * * * *', async () => {
     logger.info('Running payment reconciliation');
-    await paymentReconcileQueue.add('reconcile', { olderThanMinutes: 30 });
+    await getPaymentReconcileQueue().add('reconcile', { olderThanMinutes: 30 });
   });
   reconcileJob.start();
 

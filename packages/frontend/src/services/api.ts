@@ -134,6 +134,16 @@ export const generationsApi = {
       timeout: 60000,
     }),
 
+  templateLayouts: (data: {
+    game: string;
+    videoType: string;
+    emotion: string;
+    mainObject: string;
+    text?: string | undefined;
+    dominantColor: string;
+    facecamStyle: string;
+  }) => api.post('/generations/template-layouts', data),
+
   list: (params?: { page?: number; limit?: number; status?: string }) =>
     api.get('/generations', { params }),
 

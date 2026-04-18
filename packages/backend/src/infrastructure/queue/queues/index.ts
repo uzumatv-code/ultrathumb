@@ -1,141 +1,148 @@
 // =============================================================================
-// ThumbForge AI — BullMQ Queues
+// ThumbForge AI - BullMQ Queues
 // =============================================================================
 
 import { Queue } from 'bullmq';
 import { getBullRedisOptions } from '../../cache/redis.js';
+import {
+  QUEUE_NAMES,
+  type AuditWriteJobData,
+  type GenerationAiJobData,
+  type GenerationPostJobData,
+  type NotificationEmailJobData,
+  type PaymentReconcileJobData,
+  type PaymentWebhookJobData,
+} from './contracts.js';
+
+export { QUEUE_NAMES } from './contracts.js';
+export type {
+  AuditWriteJobData,
+  GenerationAiJobData,
+  GenerationPostJobData,
+  NotificationEmailJobData,
+  PaymentReconcileJobData,
+  PaymentWebhookJobData,
+} from './contracts.js';
 
 const connection = () => ({
   connection: getBullRedisOptions(),
 });
 
-// ─── Queue Names ──────────────────────────────────────────────────────────
+let generationAiQueueInstance: Queue<GenerationAiJobData> | null = null;
+let generationPostQueueInstance: Queue<GenerationPostJobData> | null = null;
+let paymentWebhookQueueInstance: Queue<PaymentWebhookJobData> | null = null;
+let paymentReconcileQueueInstance: Queue<PaymentReconcileJobData> | null = null;
+let notificationEmailQueueInstance: Queue<NotificationEmailJobData> | null = null;
+let storageCleanupQueueInstance: Queue | null = null;
+let auditWriteQueueInstance: Queue<AuditWriteJobData> | null = null;
 
-export const QUEUE_NAMES = {
-  GENERATION_AI: 'generation-ai',
-  GENERATION_POST: 'generation-post',
-  PAYMENT_WEBHOOK: 'payment-webhook',
-  PAYMENT_RECONCILE: 'payment-reconcile',
-  NOTIFICATION_EMAIL: 'notification-email',
-  STORAGE_CLEANUP: 'storage-cleanup',
-  AUDIT_WRITE: 'audit-write',
-} as const;
+export function getGenerationAiQueue(): Queue<GenerationAiJobData> {
+  if (!generationAiQueueInstance) {
+    generationAiQueueInstance = new Queue<GenerationAiJobData>(QUEUE_NAMES.GENERATION_AI, {
+      ...connection(),
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 500 },
+      },
+    });
+  }
 
-// ─── Queue Instances ──────────────────────────────────────────────────────
-
-export const generationAiQueue = new Queue(QUEUE_NAMES.GENERATION_AI, {
-  ...connection(),
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: { type: 'exponential', delay: 5000 },
-    removeOnComplete: { count: 100 },
-    removeOnFail: { count: 500 },
-  },
-});
-
-export const generationPostQueue = new Queue(QUEUE_NAMES.GENERATION_POST, {
-  ...connection(),
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: { type: 'exponential', delay: 2000 },
-    removeOnComplete: { count: 100 },
-    removeOnFail: { count: 200 },
-  },
-});
-
-export const paymentWebhookQueue = new Queue(QUEUE_NAMES.PAYMENT_WEBHOOK, {
-  ...connection(),
-  defaultJobOptions: {
-    attempts: 5,
-    backoff: { type: 'exponential', delay: 2000 },
-    removeOnComplete: { count: 200 },
-    removeOnFail: { count: 1000 },
-  },
-});
-
-export const paymentReconcileQueue = new Queue(QUEUE_NAMES.PAYMENT_RECONCILE, {
-  ...connection(),
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: { type: 'fixed', delay: 30000 },
-    removeOnComplete: { count: 50 },
-    removeOnFail: { count: 50 },
-  },
-});
-
-export const notificationEmailQueue = new Queue(QUEUE_NAMES.NOTIFICATION_EMAIL, {
-  ...connection(),
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: { type: 'exponential', delay: 3000 },
-    removeOnComplete: { count: 50 },
-    removeOnFail: { count: 100 },
-  },
-});
-
-export const storageCleanupQueue = new Queue(QUEUE_NAMES.STORAGE_CLEANUP, {
-  ...connection(),
-  defaultJobOptions: {
-    attempts: 2,
-    removeOnComplete: { count: 20 },
-    removeOnFail: { count: 20 },
-  },
-});
-
-export const auditWriteQueue = new Queue(QUEUE_NAMES.AUDIT_WRITE, {
-  ...connection(),
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: { type: 'exponential', delay: 1000 },
-    removeOnComplete: { count: 100 },
-    removeOnFail: { count: 200 },
-  },
-});
-
-// ─── Job Type Definitions ─────────────────────────────────────────────────
-
-export interface GenerationAiJobData {
-  generationId: string;
-  tenantId: string;
-  userId: string;
+  return generationAiQueueInstance;
 }
 
-export interface GenerationPostJobData {
-  generationId: string;
-  tenantId: string;
-  variantPaths: Array<{
-    index: number;
-    hdPath: string;
-    imageBuffer: string; // base64
-  }>;
+export function getGenerationPostQueue(): Queue<GenerationPostJobData> {
+  if (!generationPostQueueInstance) {
+    generationPostQueueInstance = new Queue<GenerationPostJobData>(QUEUE_NAMES.GENERATION_POST, {
+      ...connection(),
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 200 },
+      },
+    });
+  }
+
+  return generationPostQueueInstance;
 }
 
-export interface PaymentWebhookJobData {
-  webhookEventId: string;
-  provider: string;
-  eventType: string;
-  payload: Record<string, unknown>;
+export function getPaymentWebhookQueue(): Queue<PaymentWebhookJobData> {
+  if (!paymentWebhookQueueInstance) {
+    paymentWebhookQueueInstance = new Queue<PaymentWebhookJobData>(QUEUE_NAMES.PAYMENT_WEBHOOK, {
+      ...connection(),
+      defaultJobOptions: {
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: { count: 200 },
+        removeOnFail: { count: 1000 },
+      },
+    });
+  }
+
+  return paymentWebhookQueueInstance;
 }
 
-export interface PaymentReconcileJobData {
-  olderThanMinutes: number;
+export function getPaymentReconcileQueue(): Queue<PaymentReconcileJobData> {
+  if (!paymentReconcileQueueInstance) {
+    paymentReconcileQueueInstance = new Queue<PaymentReconcileJobData>(QUEUE_NAMES.PAYMENT_RECONCILE, {
+      ...connection(),
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: 'fixed', delay: 30000 },
+        removeOnComplete: { count: 50 },
+        removeOnFail: { count: 50 },
+      },
+    });
+  }
+
+  return paymentReconcileQueueInstance;
 }
 
-export interface NotificationEmailJobData {
-  to: string;
-  subject: string;
-  template: string;
-  data: Record<string, unknown>;
+export function getNotificationEmailQueue(): Queue<NotificationEmailJobData> {
+  if (!notificationEmailQueueInstance) {
+    notificationEmailQueueInstance = new Queue<NotificationEmailJobData>(QUEUE_NAMES.NOTIFICATION_EMAIL, {
+      ...connection(),
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 3000 },
+        removeOnComplete: { count: 50 },
+        removeOnFail: { count: 100 },
+      },
+    });
+  }
+
+  return notificationEmailQueueInstance;
 }
 
-export interface AuditWriteJobData {
-  tenantId?: string;
-  userId?: string;
-  action: string;
-  resourceType?: string;
-  resourceId?: string;
-  ipAddress?: string;
-  userAgent?: string;
-  requestId?: string;
-  metadata?: Record<string, unknown>;
+export function getStorageCleanupQueue(): Queue {
+  if (!storageCleanupQueueInstance) {
+    storageCleanupQueueInstance = new Queue(QUEUE_NAMES.STORAGE_CLEANUP, {
+      ...connection(),
+      defaultJobOptions: {
+        attempts: 2,
+        removeOnComplete: { count: 20 },
+        removeOnFail: { count: 20 },
+      },
+    });
+  }
+
+  return storageCleanupQueueInstance;
+}
+
+export function getAuditWriteQueue(): Queue<AuditWriteJobData> {
+  if (!auditWriteQueueInstance) {
+    auditWriteQueueInstance = new Queue<AuditWriteJobData>(QUEUE_NAMES.AUDIT_WRITE, {
+      ...connection(),
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 1000 },
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 200 },
+      },
+    });
+  }
+
+  return auditWriteQueueInstance;
 }

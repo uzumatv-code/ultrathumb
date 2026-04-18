@@ -228,8 +228,8 @@ export class PaymentsService {
       return;
     }
 
-    const { paymentWebhookQueue } = await import('../../infrastructure/queue/queues/index.js');
-    await paymentWebhookQueue.add('process-webhook', {
+    const { getPaymentWebhookQueue } = await import('../../infrastructure/queue/queues/index.js');
+    await getPaymentWebhookQueue().add('process-webhook', {
       webhookEventId: webhookEvent.id,
       provider: 'mercadopago',
       eventType: (payload['type'] as string) ?? 'unknown',

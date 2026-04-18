@@ -1,10 +1,12 @@
 # ThumbForge AI
 
-Arquitetura inicial de produto e sistema: [`docs/architecture/01-system-overview.md`](/abs/path/c:/Users/Vibratho/Documents/Projetos/UltraThumbMaker/docs/architecture/01-system-overview.md)
+Arquitetura inicial de produto e sistema: [docs/architecture/01-system-overview.md](docs/architecture/01-system-overview.md)
 
 SaaS multi-tenant para criadores gerarem thumbnails com IA a partir de uma referencia visual, assets separados, configuracao de texto e instrucoes livres.
 
-O repositório está organizado como monorepo com:
+## Estrutura
+
+O repositorio esta organizado como monorepo com:
 
 - `packages/frontend`: React + Vite + TypeScript + Tailwind
 - `packages/backend`: Fastify + TypeScript + Prisma + BullMQ
@@ -19,7 +21,7 @@ Base do monorepo estruturada e validada com:
 - `test` passando
 - frontend e backend compilando no root
 
-Partes já scaffoldadas:
+Partes ja scaffoldadas:
 
 - autenticacao com JWT + refresh token
 - geracoes + assets + pipeline de IA
@@ -29,7 +31,7 @@ Partes já scaffoldadas:
 - filas com BullMQ
 - schema Prisma MySQL
 
-Observacao importante:
+Observacoes importantes:
 
 - as geracoes e webhooks dependem do worker do backend
 - `npm run dev` e `npm run start` no root sobem frontend + API
@@ -38,7 +40,7 @@ Observacao importante:
 ## Requisitos
 
 - Node.js `>= 20`
-- `pnpm >= 9`
+- `npm >= 9`
 - MySQL
 - Redis
 - storage S3-compatible ou MinIO
@@ -51,10 +53,10 @@ Servicos externos opcionais para fluxo completo:
 
 ## Instalacao
 
-Este monorepo usa `pnpm workspaces`. Para instalar corretamente, use:
+Este monorepo usa `npm workspaces`. Para instalar corretamente, use:
 
 ```bash
-pnpm install
+npm install
 ```
 
 Depois copie o arquivo de exemplo de ambiente:
@@ -77,19 +79,13 @@ Para IA e pagamentos reais, configure tambem:
 
 ## Scripts do root
 
-Voce pode usar os comandos abaixo no root do projeto:
+Comandos principais no root:
 
 ```bash
 npm run dev
 npm run build
 npm run start
 ```
-
-O que cada um faz:
-
-- `npm run dev`: roda frontend + backend em desenvolvimento
-- `npm run build`: builda `shared`, `backend` e `frontend`
-- `npm run start`: roda backend compilado + frontend em preview de producao
 
 Tambem existem:
 
@@ -98,32 +94,42 @@ npm run type-check
 npm run test
 npm run db:generate
 npm run db:migrate
+npm run db:migrate:dev
 npm run db:push
 npm run db:seed
 npm run db:setup
 npm run db:status
+npm run db:studio
 ```
 
-## Scripts uteis por pacote
+## Scripts por pacote
 
 Backend:
 
 ```bash
-pnpm --filter @thumbforge/backend dev
-pnpm --filter @thumbforge/backend start
-pnpm --filter @thumbforge/backend worker:dev
-pnpm --filter @thumbforge/backend worker:start
-pnpm --filter @thumbforge/backend db:generate
-pnpm --filter @thumbforge/backend db:migrate:dev
-pnpm --filter @thumbforge/backend db:seed
+npm run dev --workspace=@thumbforge/backend
+npm run start --workspace=@thumbforge/backend
+npm run worker:dev --workspace=@thumbforge/backend
+npm run worker:start --workspace=@thumbforge/backend
+npm run db:generate --workspace=@thumbforge/backend
+npm run db:migrate:dev --workspace=@thumbforge/backend
+npm run db:seed --workspace=@thumbforge/backend
 ```
 
 Frontend:
 
 ```bash
-pnpm --filter @thumbforge/frontend dev
-pnpm --filter @thumbforge/frontend build
-pnpm --filter @thumbforge/frontend start
+npm run dev --workspace=@thumbforge/frontend
+npm run build --workspace=@thumbforge/frontend
+npm run start --workspace=@thumbforge/frontend
+```
+
+Shared:
+
+```bash
+npm run build --workspace=@thumbforge/shared
+npm run dev --workspace=@thumbforge/shared
+npm run type-check --workspace=@thumbforge/shared
 ```
 
 ## Fluxo local recomendado
@@ -160,7 +166,7 @@ npm run db:setup
 
 Se voce precisar aplicar a estrutura manualmente no MySQL, a migration inicial gerada esta em:
 
-- [`packages/backend/prisma/migrations/20260415183000_init/migration.sql`](/abs/path/c:/Users/Vibratho/Documents/Projetos/UltraThumbMaker/packages/backend/prisma/migrations/20260415183000_init/migration.sql)
+- `packages/backend/prisma/migrations/20260415183000_init/migration.sql`
 
 ### 4. Rodar app
 
@@ -173,7 +179,7 @@ npm run dev
 Em outro terminal, rode o worker:
 
 ```bash
-pnpm --filter @thumbforge/backend worker:dev
+npm run worker:dev --workspace=@thumbforge/backend
 ```
 
 ## Portas padrao
@@ -190,27 +196,27 @@ Healthchecks do backend:
 
 ```text
 .
-├─ packages/
-│  ├─ backend/
-│  │  ├─ prisma/
-│  │  └─ src/
-│  │     ├─ infrastructure/
-│  │     ├─ modules/
-│  │     ├─ shared/
-│  │     └─ workers/
-│  ├─ frontend/
-│  │  └─ src/
-│  │     ├─ components/
-│  │     ├─ pages/
-│  │     ├─ services/
-│  │     ├─ stores/
-│  │     └─ styles/
-│  └─ shared/
-│     └─ src/
-├─ .env.example
-├─ package.json
-├─ pnpm-workspace.yaml
-└─ turbo.json
+|-- packages/
+|   |-- backend/
+|   |   |-- prisma/
+|   |   `-- src/
+|   |       |-- infrastructure/
+|   |       |-- modules/
+|   |       |-- shared/
+|   |       `-- workers/
+|   |-- frontend/
+|   |   `-- src/
+|   |       |-- components/
+|   |       |-- pages/
+|   |       |-- services/
+|   |       |-- stores/
+|   |       `-- styles/
+|   `-- shared/
+|       `-- src/
+|-- .env.example
+|-- package-lock.json
+|-- package.json
+`-- turbo.json
 ```
 
 ## Modulos backend ja presentes
@@ -250,16 +256,16 @@ Paginas atualmente criadas:
 
 ## Ambiente
 
-As variaveis documentadas estao em [`.env.example`](/abs/path/c:/Users/Vibratho/Documents/Projetos/UltraThumbMaker/.env.example).
+As variaveis documentadas estao em `.env.example`.
 
 ## Validacao recente
 
 Executado com sucesso:
 
 ```bash
-pnpm type-check
-pnpm build
-pnpm test
+npm run type-check
+npm run build
+npm run test
 ```
 
 ## Pendencias naturais do proximo bloco

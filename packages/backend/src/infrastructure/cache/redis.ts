@@ -8,6 +8,7 @@ import { logger } from '../../shared/utils/logger.js';
 let redisClient: Redis | null = null;
 const memoryStore = new Map<string, { value: string; expiresAt: number | null }>();
 const redisFailureCooldownMs = parseInt(process.env['REDIS_FAILURE_COOLDOWN_MS'] ?? '30000');
+const redisConnectTimeoutMs = parseInt(process.env['REDIS_CONNECT_TIMEOUT_MS'] ?? '15000');
 let redisTemporarilyDisabledUntil = 0;
 const DEFAULT_REDIS_URL = 'redis://localhost:6379';
 
@@ -70,6 +71,7 @@ function buildRedisOptions(overrides: Partial<RedisOptions> = {}): RedisOptions 
       }
       return Math.min(times * 200, 2000);
     },
+    connectTimeout: redisConnectTimeoutMs,
     enableReadyCheck: true,
     ...overrides,
   };

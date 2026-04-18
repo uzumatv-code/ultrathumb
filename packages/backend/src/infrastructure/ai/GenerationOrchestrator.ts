@@ -9,9 +9,18 @@ import { OpenAIProvider } from './providers/OpenAIProvider.js';
 import type { AIImageProviderInterface, GenerationRequest } from './AIProviderInterface.js';
 import { logger } from '../../shared/utils/logger.js';
 import { AIProviderError } from '../../shared/errors/AppError.js';
-import type { ReferenceAnalysis, StructuredPrompt, VariantType } from '@thumbforge/shared';
+import type {
+  GenerationWorkflowMode,
+  ReferenceAnalysis,
+  ReferenceAnalysisFull,
+  StructuredPrompt,
+  StyleConfig,
+  TemplateIntelligenceInput,
+  VariantType,
+} from '@thumbforge/shared';
 import { ReferenceAnalyzerService } from '../../modules/reference-analyzer/reference-analyzer.service.js';
 import { PromptBuilderService } from '../../modules/prompt-builder/prompt-builder.service.js';
+import { ThumbnailWorkflowService } from '../../modules/generations/thumbnail-workflow.service.js';
 
 const PREVIEW_WIDTH = parseInt(process.env['PREVIEW_WIDTH'] ?? '480');
 const PREVIEW_HEIGHT = parseInt(process.env['PREVIEW_HEIGHT'] ?? '270');
@@ -24,11 +33,13 @@ export class GenerationOrchestrator {
   private provider: AIImageProviderInterface;
   private referenceAnalyzer: ReferenceAnalyzerService;
   private promptBuilder: PromptBuilderService;
+  private workflowService: ThumbnailWorkflowService;
 
   constructor(provider?: AIImageProviderInterface) {
     this.provider = provider ?? new OpenAIProvider();
     this.referenceAnalyzer = new ReferenceAnalyzerService();
     this.promptBuilder = new PromptBuilderService();
+    this.workflowService = new ThumbnailWorkflowService(this.promptBuilder);
   }
 
   async execute(
@@ -83,6 +94,12 @@ export class GenerationOrchestrator {
       const styleConfig = generation.styleConfig as Record<string, unknown>;
       const templateConfig = generation.template?.defaultStyleConfig as Record<string, unknown> | null;
       const templateHints = generation.template?.defaultPromptHints;
+      const metadata = (generation.metadata ?? {}) as {
+        workflowMode?: GenerationWorkflowMode;
+        variantTypes?: VariantType[];
+        templateModeInput?: TemplateIntelligenceInput;
+        selectedLayoutIds?: string[];
+      };
 
       const structuredPrompt: StructuredPrompt = {
         styleConfig: {
@@ -99,18 +116,27 @@ export class GenerationOrchestrator {
         ...(templateHints ? { templateContext: templateHints } : {}),
       };
 
-      // Build typed variant prompts if variantTypes provided
-      const variantTypes = options.variantTypes ?? [];
+      // Build typed or workflow-driven prompts
+      const variantTypes = options.variantTypes ?? metadata.variantTypes ?? [];
       let builtPrompts: import('@thumbforge/shared').BuiltPrompt[] | undefined;
 
-      if (variantTypes.length > 0 && referenceAnalysis) {
+      if (metadata.workflowMode === 'template' && metadata.templateModeInput) {
+        builtPrompts = this.workflowService.buildTemplateModePrompts({
+          input: metadata.templateModeInput,
+          selectedLayoutIds: metadata.selectedLayoutIds,
+          styleConfig: structuredPrompt.styleConfig as StyleConfig,
+          ...(referenceAnalysis
+            ? { referenceAnalysis: referenceAnalysis as ReferenceAnalysisFull }
+            : {}),
+        });
+      } else if (variantTypes.length > 0 && referenceAnalysis) {
         builtPrompts = variantTypes.map((vt) =>
           this.promptBuilder.buildFromAnalysis(
-            referenceAnalysis as import('@thumbforge/shared').ReferenceAnalysisFull,
+            referenceAnalysis as ReferenceAnalysisFull,
             {
               style: (styleConfig['visualStyle'] as import('@thumbforge/shared').VisualStyle) ?? 'gamer',
               composition: {
-                layout: (referenceAnalysis as import('@thumbforge/shared').ReferenceAnalysisFull).layout,
+                layout: (referenceAnalysis as ReferenceAnalysisFull).layout,
                 textContent: (styleConfig['text'] as string) ?? undefined,
                 hasCTA: false,
               },
@@ -120,10 +146,17 @@ export class GenerationOrchestrator {
         );
       }
 
-      const variantsCount = variantTypes.length > 0 ? variantTypes.length : 3;
+      const variantsCount = builtPrompts?.length ?? (variantTypes.length > 0 ? variantTypes.length : 3);
 
       // ── Step 5: Generate variants ────────────────────────────────────────
-      log.info({ variantsCount, typed: variantTypes.length > 0 }, 'Calling AI provider for generation');
+      log.info(
+        {
+          variantsCount,
+          typed: Boolean((builtPrompts?.length ?? 0) > 0 || variantTypes.length > 0),
+          workflowMode: metadata.workflowMode ?? 'reference',
+        },
+        'Calling AI provider for generation',
+      );
       const startTime = Date.now();
 
       const genRequest: GenerationRequest = {

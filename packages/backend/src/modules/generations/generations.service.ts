@@ -10,10 +10,14 @@ import { AssetType } from '@prisma/client';
 import {
   QuotaExceededError,
   NotFoundError,
-  ForbiddenError,
   ValidationError,
 } from '../../shared/errors/AppError.js';
-import type { StyleConfig } from '@thumbforge/shared';
+import type {
+  GenerationWorkflowMode,
+  StyleConfig,
+  TemplateIntelligenceInput,
+  VariantType,
+} from '@thumbforge/shared';
 
 const MAX_FILE_SIZE = parseInt(process.env['UPLOAD_MAX_SIZE_MB'] ?? '10') * 1024 * 1024;
 const ALLOWED_TYPES = (process.env['UPLOAD_ALLOWED_TYPES'] ?? 'image/jpeg,image/png,image/webp').split(',');
@@ -38,6 +42,10 @@ export interface CreateGenerationInput {
   savedModelId?: string | undefined;
   freeTextPrompt?: string | undefined;
   styleConfig: StyleConfig;
+  variantTypes?: VariantType[] | undefined;
+  workflowMode?: GenerationWorkflowMode | undefined;
+  templateModeInput?: TemplateIntelligenceInput | undefined;
+  selectedLayoutIds?: string[] | undefined;
   files: {
     reference?: UploadedGenerationFile[] | undefined;
     person?: UploadedGenerationFile[] | undefined;
@@ -46,6 +54,25 @@ export interface CreateGenerationInput {
 }
 
 export class GenerationsService {
+  private buildGenerationMetadata(input: CreateGenerationInput): Record<string, unknown> | undefined {
+    const metadata: Record<string, unknown> = {};
+
+    if (input.workflowMode) {
+      metadata['workflowMode'] = input.workflowMode;
+    }
+    if (input.variantTypes?.length) {
+      metadata['variantTypes'] = input.variantTypes;
+    }
+    if (input.templateModeInput) {
+      metadata['templateModeInput'] = input.templateModeInput;
+    }
+    if (input.selectedLayoutIds?.length) {
+      metadata['selectedLayoutIds'] = input.selectedLayoutIds;
+    }
+
+    return Object.keys(metadata).length ? metadata : undefined;
+  }
+
   private resolveVariantMediaUrls<
     T extends {
       previewUrl?: string | null;
@@ -73,6 +100,8 @@ export class GenerationsService {
     this.validateFiles(input.files);
 
     // 3. Create generation record
+    const generationMetadata = this.buildGenerationMetadata(input);
+
     const generation = await prisma.generationRequest.create({
       data: {
         tenantId: input.tenantId,
@@ -82,6 +111,7 @@ export class GenerationsService {
         status: 'QUEUED',
         freeTextPrompt: input.freeTextPrompt ?? null,
         styleConfig: input.styleConfig as object,
+        ...(generationMetadata ? { metadata: generationMetadata as object } : {}),
         quotaCounted: true,
       },
     });
@@ -105,7 +135,10 @@ export class GenerationsService {
       );
 
       setTimeout(() => {
-        void inlineGenerationOrchestrator.execute(generation.id).catch((error: unknown) => {
+        void inlineGenerationOrchestrator.execute(
+          generation.id,
+          input.variantTypes?.length ? { variantTypes: input.variantTypes } : {},
+        ).catch((error: unknown) => {
           logger.error(
             { err: error, generationId: generation.id, tenantId: input.tenantId },
             'Inline generation failed',
@@ -113,13 +146,14 @@ export class GenerationsService {
         });
       }, 0);
     } else {
-      const { generationAiQueue } = await import('../../infrastructure/queue/queues/index.js');
-      const job = await generationAiQueue.add(
+      const { getGenerationAiQueue } = await import('../../infrastructure/queue/queues/index.js');
+      const job = await getGenerationAiQueue().add(
         'generate',
         {
           generationId: generation.id,
           tenantId: input.tenantId,
           userId: input.userId,
+          ...(input.variantTypes?.length ? { variantTypes: input.variantTypes } : {}),
         },
         { priority: 1 },
       );
@@ -240,8 +274,8 @@ export class GenerationsService {
 
     // Remove from queue if possible
     if (generation.queueJobId && !shouldRunGenerationInline()) {
-      const { generationAiQueue } = await import('../../infrastructure/queue/queues/index.js');
-      const job = await generationAiQueue.getJob(generation.queueJobId);
+      const { getGenerationAiQueue } = await import('../../infrastructure/queue/queues/index.js');
+      const job = await getGenerationAiQueue().getJob(generation.queueJobId);
       if (job) await job.remove();
     }
 

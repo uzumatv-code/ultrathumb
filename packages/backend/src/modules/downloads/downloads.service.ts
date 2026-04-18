@@ -11,6 +11,7 @@ import {
   DownloadExpiredError,
   ForbiddenError,
 } from '../../shared/errors/AppError.js';
+import type { AuditWriteJobData } from '../../infrastructure/queue/queues/contracts.js';
 
 const DOWNLOAD_URL_EXPIRES_MINUTES = parseInt(
   process.env['DOWNLOAD_URL_EXPIRES_MINUTES'] ?? '15',
@@ -98,21 +99,21 @@ export class DownloadsService {
       },
     });
 
-    const auditJob = {
+    const auditJob: AuditWriteJobData = {
       tenantId,
       userId,
       action: 'download.complete',
       resourceType: 'variant',
       resourceId: variantId,
-      ipAddress,
-      userAgent,
       metadata: { downloadId: download.id, variantIndex: download.variant.variantIndex },
+      ...(ipAddress ? { ipAddress } : {}),
+      ...(userAgent ? { userAgent } : {}),
     };
 
     // 6. Audit log (async, non-blocking)
     if (isQueueRuntimeEnabled()) {
-      const { auditWriteQueue } = await import('../../infrastructure/queue/queues/index.js');
-      await auditWriteQueue.add('audit', auditJob);
+      const { getAuditWriteQueue } = await import('../../infrastructure/queue/queues/index.js');
+      await getAuditWriteQueue().add('audit', auditJob);
     } else {
       logger.warn({ tenantId, userId, variantId }, 'Redis queue disabled, writing audit inline');
       void prisma.auditLog

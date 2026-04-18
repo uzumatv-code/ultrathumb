@@ -6,8 +6,7 @@ import { Worker } from 'bullmq';
 import { getBullRedisOptions } from '../../cache/redis.js';
 import { GenerationOrchestrator } from '../../ai/GenerationOrchestrator.js';
 import { logger } from '../../../shared/utils/logger.js';
-import { QUEUE_NAMES } from '../queues/index.js';
-import type { GenerationAiJobData } from '../queues/index.js';
+import { QUEUE_NAMES, type GenerationAiJobData } from '../queues/contracts.js';
 import { prisma } from '../../database/client.js';
 
 const CONCURRENCY = parseInt(process.env['GENERATION_CONCURRENCY'] ?? '3');

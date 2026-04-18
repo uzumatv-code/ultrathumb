@@ -6,17 +6,12 @@
 // =============================================================================
 
 import type { FastifyInstance } from 'fastify';
-import { z } from 'zod';
 import { ReferenceAnalyzerService } from './reference-analyzer.service.js';
 import { authenticate } from '../../shared/middlewares/authenticate.js';
 import { ValidationError } from '../../shared/errors/AppError.js';
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_SIZE = parseInt(process.env['UPLOAD_MAX_SIZE_MB'] ?? '10') * 1024 * 1024;
-
-const analyzeQuerySchema = z.object({
-  generationId: z.string().uuid().optional(),
-});
 
 export async function referenceAnalyzerRoutes(fastify: FastifyInstance): Promise<void> {
   const service = new ReferenceAnalyzerService();
@@ -56,7 +51,13 @@ export async function referenceAnalyzerRoutes(fastify: FastifyInstance): Promise
       generationId,
     );
 
-    return reply.send({ success: true, data: analysis });
+    return reply.send({
+      success: true,
+      data: {
+        analysis,
+        guidedFlow: service.buildGuidedFlow(analysis),
+      },
+    });
   });
 
   // GET /api/reference-analyzer/generation/:generationId
@@ -74,6 +75,12 @@ export async function referenceAnalyzerRoutes(fastify: FastifyInstance): Promise
   // GET /api/reference-analyzer/:id
   fastify.get<{ Params: { id: string } }>('/:id', async (request, reply) => {
     const analysis = await service.getAnalysis(request.params.id, request.tenantId);
-    return reply.send({ success: true, data: analysis });
+    return reply.send({
+      success: true,
+      data: {
+        analysis,
+        guidedFlow: service.buildGuidedFlow(analysis),
+      },
+    });
   });
 }
