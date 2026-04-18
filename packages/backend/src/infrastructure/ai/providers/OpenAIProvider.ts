@@ -3,7 +3,12 @@
 // =============================================================================
 
 import OpenAI from 'openai';
-import type { AIImageProviderInterface, GenerationRequest } from '../AIProviderInterface.js';
+import type {
+  AIImageProviderInterface,
+  GenerationRequest,
+  ImagePartGenerationRequest,
+  ImagePartGenerationResult,
+} from '../AIProviderInterface.js';
 import type { ReferenceAnalysis, AIGenerationResult } from '@thumbforge/shared';
 import { logger } from '../../../shared/utils/logger.js';
 import { AIProviderError } from '../../../shared/errors/AppError.js';
@@ -137,6 +142,30 @@ Be precise and actionable in your analysis.`,
     };
   }
 
+  async generateImagePart(request: ImagePartGenerationRequest): Promise<ImagePartGenerationResult> {
+    const response = await this.client.images.generate({
+      model: GENERATION_MODEL,
+      prompt: request.builtPrompt?.finalPrompt ?? request.prompt,
+      n: 1,
+      size: this.resolveSize(request.width, request.height),
+      quality: 'hd',
+      response_format: 'b64_json',
+      style: 'vivid',
+    });
+
+    const imageData = response.data?.[0];
+    if (!imageData?.b64_json) {
+      throw new AIProviderError(`No image data returned for ${request.partType}`);
+    }
+
+    return {
+      imageBuffer: Buffer.from(imageData.b64_json, 'base64'),
+      ...(imageData.revised_prompt ? { revisedPrompt: imageData.revised_prompt } : {}),
+      estimatedCostCents: tocentsCents(COST_PER_IMAGE_USD),
+      modelUsed: GENERATION_MODEL,
+    };
+  }
+
   estimateCostCents(request: GenerationRequest): number {
     // Vision model call + N image generations
     const visionCost = tocentsCents(0.005); // ~$0.005 for vision analysis
@@ -243,5 +272,11 @@ Be precise and actionable in your analysis.`,
     );
 
     return parts.join(' ');
+  }
+
+  private resolveSize(width = 1280, height = 720): '1024x1024' | '1792x1024' | '1024x1792' {
+    if (height > width) return '1024x1792';
+    if (width > height) return '1792x1024';
+    return '1024x1024';
   }
 }

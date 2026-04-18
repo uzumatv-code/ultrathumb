@@ -217,6 +217,15 @@ export class StorageService {
     return `${tenantId}/${generationId}/output/variant_${variantIndex}_hd.webp`;
   }
 
+  buildProcessedAssetPath(
+    tenantId: string,
+    generationId: string,
+    assetKey: string,
+    extension: string,
+  ): string {
+    return `${tenantId}/${generationId}/processed/${assetKey}.${extension.replace(/^\./, '')}`;
+  }
+
   buildPreviewPath(tenantId: string, generationId: string, variantIndex: number): string {
     return `${tenantId}/${generationId}/variant_${variantIndex}_preview.webp`;
   }

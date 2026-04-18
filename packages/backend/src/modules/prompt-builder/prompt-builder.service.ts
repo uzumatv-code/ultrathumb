@@ -8,7 +8,9 @@ import { VariantType } from '@thumbforge/shared';
 import type {
   PromptBuilderInput,
   BuiltPrompt,
+  BuiltImagePartPrompt,
   ReferenceAnalysisFull,
+  StyleConfig,
 } from '@thumbforge/shared';
 
 const PROMPT_VERSION = '2.0';
@@ -258,5 +260,67 @@ export class PromptBuilderService {
     };
 
     return this.build(derived);
+  }
+
+  buildBackgroundPartPrompt(params: {
+    analysis?: ReferenceAnalysisFull | undefined;
+    styleConfig?: StyleConfig | undefined;
+    description?: string | undefined;
+    freeTextInstructions?: string | undefined;
+    variantType?: VariantType | undefined;
+  }): BuiltImagePartPrompt {
+    const variantType = params.variantType ?? VariantType.VIRAL;
+    const analysis = params.analysis;
+    const compositionPrompt = params.styleConfig?.composition?.generatedBackgroundPrompt;
+    const parts = [
+      'Generate only the background plate for a YouTube thumbnail composition.',
+      'No people, no foreground objects, no box art, no UI, no text, no logos.',
+      'Leave clear subject space for later compositing on the right half of the frame.',
+      analysis
+        ? `Reference style: ${analysis.style}, ${analysis.thumbnailStyle}, ${analysis.backgroundType} background, colors ${analysis.dominantColors.join(', ')}.`
+        : '',
+      params.description ? `Scene description: ${params.description}.` : '',
+      compositionPrompt ? `Background brief: ${compositionPrompt}.` : '',
+      params.freeTextInstructions ? `Additional direction: ${params.freeTextInstructions}.` : '',
+      buildVariantDirective(variantType),
+      'Output: cinematic, clean, slightly blurred background plate ready for compositing.',
+    ].filter(Boolean);
+
+    return {
+      partType: 'background',
+      finalPrompt: parts.join(' '),
+      negativePrompt: 'people, face, hands, readable UI, text, title, watermark, logo, item box, weapon in foreground',
+      promptVersion: PROMPT_VERSION,
+      variantType,
+    };
+  }
+
+  buildEffectsPartPrompt(params: {
+    analysis?: ReferenceAnalysisFull | undefined;
+    styleConfig?: StyleConfig | undefined;
+    freeTextInstructions?: string | undefined;
+    variantType?: VariantType | undefined;
+  }): BuiltImagePartPrompt {
+    const variantType = params.variantType ?? VariantType.VIRAL;
+    const analysis = params.analysis;
+    const effectsPrompt = params.styleConfig?.composition?.generatedEffectsPrompt;
+    const parts = [
+      'Generate an abstract effects plate for a YouTube thumbnail composition.',
+      'No people, no faces, no UI, no readable text, no logos.',
+      'Focus on glow streaks, particles, sparks, haze, and energy accents over transparency-like dark background.',
+      analysis ? `Match the palette ${analysis.dominantColors.join(', ')} and the ${analysis.style} aesthetic.` : '',
+      effectsPrompt ? `Effects brief: ${effectsPrompt}.` : '',
+      params.freeTextInstructions ? `Additional direction: ${params.freeTextInstructions}.` : '',
+      buildVariantDirective(variantType),
+      'Output: effects overlay plate with isolated glow elements and dark negative space.',
+    ].filter(Boolean);
+
+    return {
+      partType: 'effects',
+      finalPrompt: parts.join(' '),
+      negativePrompt: 'people, full scene, readable text, user interface, logo, flat background, centered subject',
+      promptVersion: PROMPT_VERSION,
+      variantType,
+    };
   }
 }

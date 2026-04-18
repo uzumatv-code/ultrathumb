@@ -139,10 +139,12 @@ export interface GenerationRequestDTO {
   userId: string;
   templateId?: string | null;
   status: GenerationStatus;
+  renderMode?: GenerationRenderMode | null;
   freeTextPrompt?: string | null;
   styleConfig: StyleConfig;
   variants: GenerationVariantDTO[];
   assets: GenerationAssetDTO[];
+  layers?: GenerationLayerDTO[] | undefined;
   errorMessage?: string | null;
   queuedAt: string;
   startedAt?: string | null;
@@ -169,10 +171,17 @@ export interface GenerationAssetDTO {
   id: string;
   generationId: string;
   type: AssetType;
+  role?: 'INPUT' | 'PROCESSED' | 'GENERATED' | 'STATIC' | undefined;
+  key?: string | null | undefined;
+  sourceAssetId?: string | null | undefined;
   originalFilename: string;
   storagePath: string;
   mimeType: string;
   fileSizeBytes: number;
+  width?: number | null | undefined;
+  height?: number | null | undefined;
+  isProcessed?: boolean | undefined;
+  metadata?: Record<string, unknown> | null | undefined;
 }
 
 export interface StyleConfig {
@@ -196,6 +205,7 @@ export interface StyleConfig {
   facecamStyle?: string | undefined;
   realismGoal?: 'maintain' | 'realistic' | 'punchier' | undefined;
   templateLayoutId?: string | undefined;
+  composition?: CompositionStyleConfig | undefined;
 }
 
 export type TextPosition =
@@ -206,7 +216,64 @@ export type TextPosition =
 export type VisualStyle =
   | 'gamer' | 'cinematic' | 'clean' | 'high-energy' | 'dramatic' | 'minimal';
 
-export type GenerationWorkflowMode = 'reference' | 'template' | 'editor';
+export type GenerationWorkflowMode = 'reference' | 'template' | 'editor' | 'composition';
+export type GenerationRenderMode = 'one-shot' | 'composite';
+export type CompositionTemplatePreset = 'split-ui-hero' | 'split-reference-right' | 'custom';
+export type CompositionDividerStyle = 'diagonal' | 'gradient' | 'hard-split';
+
+export interface CompositionTextLayer {
+  text: string;
+  x: number;
+  y: number;
+  width?: number | undefined;
+  fontSize: number;
+  fontFamily?: string | undefined;
+  fontWeight?: 'regular' | 'bold' | 'black' | undefined;
+  fill: string;
+  stroke?: string | undefined;
+  strokeWidth?: number | undefined;
+  shadowColor?: string | undefined;
+  shadowBlur?: number | undefined;
+  align?: 'left' | 'center' | 'right' | undefined;
+  letterSpacing?: number | undefined;
+  uppercase?: boolean | undefined;
+}
+
+export interface CompositionStyleConfig {
+  enabled?: boolean | undefined;
+  preset?: CompositionTemplatePreset | undefined;
+  dividerStyle?: CompositionDividerStyle | undefined;
+  generatedBackgroundPrompt?: string | undefined;
+  generatedEffectsPrompt?: string | undefined;
+  nativeText?: boolean | undefined;
+  subjectPosition?: 'left' | 'right' | 'center' | undefined;
+  objectPosition?: 'left-bottom' | 'center-bottom' | 'right-bottom' | undefined;
+  backgroundBlurPx?: number | undefined;
+  rimLightColor?: string | undefined;
+  rimLightIntensity?: number | undefined;
+  textLayers?: CompositionTextLayer[] | undefined;
+}
+
+export interface GenerationLayerDTO {
+  id: string;
+  generationId: string;
+  variantIndex?: number | null | undefined;
+  assetId?: string | null | undefined;
+  name: string;
+  type: string;
+  zIndex: number;
+  x: number;
+  y: number;
+  width?: number | null | undefined;
+  height?: number | null | undefined;
+  opacity: number;
+  blendMode: string;
+  rotation: number;
+  isVisible: boolean;
+  config: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
 
 // ─── Template Types ────────────────────────────────────────────────────────
 
@@ -600,6 +667,16 @@ export interface BuiltPrompt {
   negativePrompt:  string;
   variantType:     VariantType;
   promptVersion:   string;
+}
+
+export type ImagePromptPartType = 'full-thumbnail' | 'background' | 'effects';
+
+export interface BuiltImagePartPrompt {
+  partType: ImagePromptPartType;
+  finalPrompt: string;
+  negativePrompt: string;
+  promptVersion: string;
+  variantType?: VariantType | undefined;
 }
 
 // ─── Variant Generator ─────────────────────────────────────────────────────

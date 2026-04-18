@@ -6,7 +6,7 @@ import { prisma } from '../../infrastructure/database/client.js';
 import { storageService } from '../../infrastructure/storage/StorageService.js';
 import { GenerationOrchestrator } from '../../infrastructure/ai/GenerationOrchestrator.js';
 import { logger } from '../../shared/utils/logger.js';
-import { AssetType } from '@prisma/client';
+import { AssetRole, AssetType, GenerationRenderMode } from '@prisma/client';
 import {
   QuotaExceededError,
   NotFoundError,
@@ -49,11 +49,30 @@ export interface CreateGenerationInput {
   files: {
     reference?: UploadedGenerationFile[] | undefined;
     person?: UploadedGenerationFile[] | undefined;
-    assets?: UploadedGenerationFile[] | undefined;
+    objects?: UploadedGenerationFile[] | undefined;
+    backgroundUi?: UploadedGenerationFile[] | undefined;
+    backgrounds?: UploadedGenerationFile[] | undefined;
+    effects?: UploadedGenerationFile[] | undefined;
+    logos?: UploadedGenerationFile[] | undefined;
+    badges?: UploadedGenerationFile[] | undefined;
+    icons?: UploadedGenerationFile[] | undefined;
+    other?: UploadedGenerationFile[] | undefined;
   };
 }
 
 export class GenerationsService {
+  private resolveRenderMode(input: CreateGenerationInput): GenerationRenderMode {
+    if (
+      input.workflowMode === 'composition' ||
+      input.styleConfig.composition?.enabled ||
+      (input.files.backgroundUi?.length ?? 0) > 0
+    ) {
+      return GenerationRenderMode.COMPOSITE;
+    }
+
+    return GenerationRenderMode.ONE_SHOT;
+  }
+
   private buildGenerationMetadata(input: CreateGenerationInput): Record<string, unknown> | undefined {
     const metadata: Record<string, unknown> = {};
 
@@ -101,6 +120,7 @@ export class GenerationsService {
 
     // 3. Create generation record
     const generationMetadata = this.buildGenerationMetadata(input);
+    const renderMode = this.resolveRenderMode(input);
 
     const generation = await prisma.generationRequest.create({
       data: {
@@ -109,6 +129,7 @@ export class GenerationsService {
         templateId: input.templateId ?? null,
         savedModelId: input.savedModelId ?? null,
         status: 'QUEUED',
+        renderMode,
         freeTextPrompt: input.freeTextPrompt ?? null,
         styleConfig: input.styleConfig as object,
         ...(generationMetadata ? { metadata: generationMetadata as object } : {}),
@@ -183,6 +204,9 @@ export class GenerationsService {
         },
         assets: {
           orderBy: { type: 'asc' },
+        },
+        layers: {
+          orderBy: [{ variantIndex: 'asc' }, { zIndex: 'asc' }],
         },
         template: {
           select: { id: true, name: true, category: true },
@@ -333,7 +357,14 @@ export class GenerationsService {
     const allFiles = [
       ...(files.reference ?? []),
       ...(files.person ?? []),
-      ...(files.assets ?? []),
+      ...(files.objects ?? []),
+      ...(files.backgroundUi ?? []),
+      ...(files.backgrounds ?? []),
+      ...(files.effects ?? []),
+      ...(files.logos ?? []),
+      ...(files.badges ?? []),
+      ...(files.icons ?? []),
+      ...(files.other ?? []),
     ];
 
     for (const file of allFiles) {
@@ -358,29 +389,45 @@ export class GenerationsService {
     const records: Array<{
       generationId: string;
       type: AssetType;
+      role: AssetRole;
+      key?: string;
       originalFilename: string;
       storagePath: string;
       mimeType: string;
       fileSizeBytes: number;
+      isProcessed: boolean;
     }> = [];
 
     const uploadFile = async (
       file: UploadedGenerationFile,
       type: AssetType,
       filename: string,
+      options: {
+        role?: AssetRole;
+        key?: string;
+      } = {},
     ) => {
       const path = storageService.buildInputPath(tenantId, generationId, filename);
       await storageService.uploadPrivate(path, file.buffer, {
         contentType: file.mimetype,
-        metadata: { generationId, type, originalName: file.originalname },
+        metadata: {
+          generationId,
+          type,
+          originalName: file.originalname,
+          role: options.role ?? AssetRole.INPUT,
+          ...(options.key ? { key: options.key } : {}),
+        },
       });
       records.push({
         generationId,
         type,
+        role: options.role ?? AssetRole.INPUT,
+        ...(options.key ? { key: options.key } : {}),
         originalFilename: file.originalname,
         storagePath: path,
         mimeType: file.mimetype,
         fileSizeBytes: file.size,
+        isProcessed: false,
       });
     };
 
@@ -396,10 +443,80 @@ export class GenerationsService {
       uploadPromises.push(uploadFile(files.person[0], AssetType.PERSON, 'person.webp'));
     }
 
-    if (files.assets) {
-      files.assets.forEach((file, idx) => {
+    if (files.objects) {
+      files.objects.forEach((file, idx) => {
         uploadPromises.push(
-          uploadFile(file, AssetType.OBJECT, `asset_${idx + 1}.webp`),
+          uploadFile(file, AssetType.OBJECT, `asset_${idx + 1}.webp`, {
+            key: `object_${idx + 1}`,
+          }),
+        );
+      });
+    }
+
+    if (files.backgroundUi?.[0]) {
+      uploadPromises.push(
+        uploadFile(files.backgroundUi[0], AssetType.BACKGROUND_UI, 'background_ui.webp', {
+          key: 'background_ui',
+        }),
+      );
+    }
+
+    if (files.backgrounds) {
+      files.backgrounds.forEach((file, idx) => {
+        uploadPromises.push(
+          uploadFile(file, AssetType.BACKGROUND, `background_${idx + 1}.webp`, {
+            key: `background_${idx + 1}`,
+          }),
+        );
+      });
+    }
+
+    if (files.effects) {
+      files.effects.forEach((file, idx) => {
+        uploadPromises.push(
+          uploadFile(file, AssetType.EFFECT, `effect_${idx + 1}.webp`, {
+            key: `effect_${idx + 1}`,
+          }),
+        );
+      });
+    }
+
+    if (files.logos) {
+      files.logos.forEach((file, idx) => {
+        uploadPromises.push(
+          uploadFile(file, AssetType.LOGO, `logo_${idx + 1}.webp`, {
+            key: `logo_${idx + 1}`,
+          }),
+        );
+      });
+    }
+
+    if (files.badges) {
+      files.badges.forEach((file, idx) => {
+        uploadPromises.push(
+          uploadFile(file, AssetType.BADGE, `badge_${idx + 1}.webp`, {
+            key: `badge_${idx + 1}`,
+          }),
+        );
+      });
+    }
+
+    if (files.icons) {
+      files.icons.forEach((file, idx) => {
+        uploadPromises.push(
+          uploadFile(file, AssetType.ICON, `icon_${idx + 1}.webp`, {
+            key: `icon_${idx + 1}`,
+          }),
+        );
+      });
+    }
+
+    if (files.other) {
+      files.other.forEach((file, idx) => {
+        uploadPromises.push(
+          uploadFile(file, AssetType.OTHER, `other_${idx + 1}.webp`, {
+            key: `other_${idx + 1}`,
+          }),
         );
       });
     }

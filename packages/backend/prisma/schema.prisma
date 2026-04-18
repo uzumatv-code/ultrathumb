@@ -346,8 +346,11 @@ model GenerationRequest {
   savedModelId          String?           @db.VarChar(36)
   aiProviderId          String?           @db.VarChar(36)
   status                GenerationStatus  @default(QUEUED)
+  renderMode            GenerationRenderMode @default(ONE_SHOT)
   freeTextPrompt        String?           @db.Text
   styleConfig           Json
+  canvasWidth           Int               @default(1280)
+  canvasHeight          Int               @default(720)
   structuredPromptJson  Json?             // ReferenceAnalysis + built prompt
   referenceAnalysis     Json?             // ReferenceAnalysis object
   finalPromptUsed       String?           @db.Text
@@ -375,6 +378,7 @@ model GenerationRequest {
   aiProvider AIProvider?         @relation(fields: [aiProviderId], references: [id])
   variants   GenerationVariant[]
   assets     GenerationAsset[]
+  layers     GenerationLayer[]
   prompt     GenerationPrompt?
 
   @@index([tenantId])
@@ -391,6 +395,11 @@ enum GenerationStatus {
   COMPLETED
   FAILED
   CANCELLED
+}
+
+enum GenerationRenderMode {
+  ONE_SHOT
+  COMPOSITE
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -452,19 +461,28 @@ model GenerationAsset {
   id               String    @id @default(uuid()) @db.VarChar(36)
   generationId     String    @db.VarChar(36)
   type             AssetType
+  role             AssetRole @default(INPUT)
+  key              String?   @db.VarChar(100)
+  sourceAssetId    String?   @db.VarChar(36)
   originalFilename String    @db.VarChar(255)
   storagePath      String    @db.VarChar(500)
   mimeType         String    @db.VarChar(100)
   fileSizeBytes    Int
   width            Int?
   height           Int?
+  isProcessed      Boolean   @default(false)
   metadata         Json?
   createdAt        DateTime  @default(now())
 
-  generation GenerationRequest @relation(fields: [generationId], references: [id])
+  generation    GenerationRequest @relation(fields: [generationId], references: [id])
+  sourceAsset   GenerationAsset?  @relation("GenerationAssetDerivatives", fields: [sourceAssetId], references: [id])
+  derivedAssets GenerationAsset[] @relation("GenerationAssetDerivatives")
+  layers        GenerationLayer[]
 
   @@index([generationId])
   @@index([type])
+  @@index([role])
+  @@index([sourceAssetId])
   @@map("generation_assets")
 }
 
@@ -473,10 +491,19 @@ enum AssetType {
   PERSON
   OBJECT
   BACKGROUND
+  BACKGROUND_UI
+  EFFECT
   LOGO
   BADGE
   ICON
   OTHER
+}
+
+enum AssetRole {
+  INPUT
+  PROCESSED
+  GENERATED
+  STATIC
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1003,4 +1030,33 @@ enum LayerType {
   SUBJECT
   OBJECT
   GLOW
+}
+
+model GenerationLayer {
+  id          String      @id @default(uuid()) @db.VarChar(36)
+  generationId String     @db.VarChar(36)
+  variantIndex Int?
+  assetId     String?     @db.VarChar(36)
+  name        String      @db.VarChar(100)
+  type        LayerType
+  zIndex      Int         @default(0)
+  x           Float       @default(0)
+  y           Float       @default(0)
+  width       Float?
+  height      Float?
+  opacity     Float       @default(1.0)
+  blendMode   String      @db.VarChar(30) @default("over")
+  rotation    Float       @default(0)
+  isVisible   Boolean     @default(true)
+  config      Json
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  generation GenerationRequest @relation(fields: [generationId], references: [id], onDelete: Cascade)
+  asset      GenerationAsset?  @relation(fields: [assetId], references: [id])
+
+  @@index([generationId])
+  @@index([assetId])
+  @@index([generationId, variantIndex, zIndex])
+  @@map("generation_layers")
 }

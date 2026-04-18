@@ -87,6 +87,8 @@ export enum AssetType {
   PERSON = 'PERSON',
   OBJECT = 'OBJECT',
   BACKGROUND = 'BACKGROUND',
+  BACKGROUND_UI = 'BACKGROUND_UI',
+  EFFECT = 'EFFECT',
   LOGO = 'LOGO',
   BADGE = 'BADGE',
   ICON = 'ICON',

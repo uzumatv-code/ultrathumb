@@ -13,6 +13,41 @@ import { ThumbnailWorkflowService } from './thumbnail-workflow.service.js';
 import { authenticate } from '../../shared/middlewares/authenticate.js';
 import { VariantType } from '@thumbforge/shared';
 
+const workflowModeSchema = z.enum(['reference', 'template', 'editor', 'composition']);
+
+const compositionTextLayerSchema = z.object({
+  text: z.string().min(1).max(160),
+  x: z.number().min(0).max(1280),
+  y: z.number().min(0).max(720),
+  width: z.number().min(1).max(1280).optional(),
+  fontSize: z.number().min(12).max(240),
+  fontFamily: z.string().max(120).optional(),
+  fontWeight: z.enum(['regular', 'bold', 'black']).optional(),
+  fill: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  stroke: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  strokeWidth: z.number().min(0).max(32).optional(),
+  shadowColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  shadowBlur: z.number().min(0).max(80).optional(),
+  align: z.enum(['left', 'center', 'right']).optional(),
+  letterSpacing: z.number().min(-10).max(40).optional(),
+  uppercase: z.boolean().optional(),
+});
+
+const compositionStyleSchema = z.object({
+  enabled: z.boolean().optional(),
+  preset: z.enum(['split-ui-hero', 'split-reference-right', 'custom']).optional(),
+  dividerStyle: z.enum(['diagonal', 'gradient', 'hard-split']).optional(),
+  generatedBackgroundPrompt: z.string().max(500).optional(),
+  generatedEffectsPrompt: z.string().max(500).optional(),
+  nativeText: z.boolean().optional(),
+  subjectPosition: z.enum(['left', 'right', 'center']).optional(),
+  objectPosition: z.enum(['left-bottom', 'center-bottom', 'right-bottom']).optional(),
+  backgroundBlurPx: z.number().min(0).max(64).optional(),
+  rimLightColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  rimLightIntensity: z.number().min(0).max(100).optional(),
+  textLayers: z.array(compositionTextLayerSchema).max(5).optional(),
+}).optional();
+
 const styleConfigSchema = z.object({
   fontFamily: z.string().optional(),
   fontSize: z.number().min(8).max(200).optional(),
@@ -29,7 +64,7 @@ const styleConfigSchema = z.object({
   glowColor: z.string().optional(),
   dominantColors: z.array(z.string()).optional(),
   visualStyle: z.enum(['gamer', 'cinematic', 'clean', 'high-energy', 'dramatic', 'minimal']).optional(),
-  workflowMode: z.enum(['reference', 'template', 'editor']).optional(),
+  workflowMode: workflowModeSchema.optional(),
   dominantColor: z.string().optional(),
   game: z.string().max(100).optional(),
   videoType: z.string().max(100).optional(),
@@ -38,6 +73,7 @@ const styleConfigSchema = z.object({
   facecamStyle: z.string().max(100).optional(),
   realismGoal: z.enum(['maintain', 'realistic', 'punchier']).optional(),
   templateLayoutId: z.string().max(100).optional(),
+  composition: compositionStyleSchema,
 });
 
 const listQuerySchema = z.object({
@@ -126,7 +162,7 @@ export async function generationsRoutes(fastify: FastifyInstance): Promise<void>
       ? variantTypesSchema.parse(JSON.parse(fields['variantTypes']))
       : undefined;
     const workflowMode = fields['workflowMode']
-      ? z.enum(['reference', 'template', 'editor']).parse(fields['workflowMode'])
+      ? workflowModeSchema.parse(fields['workflowMode'])
       : undefined;
     const templateModeInput = fields['templateModeInput']
       ? templateModeInputSchema.parse(JSON.parse(fields['templateModeInput']))
@@ -149,7 +185,18 @@ export async function generationsRoutes(fastify: FastifyInstance): Promise<void>
       files: {
         reference: files['reference'],
         person: files['person'],
-        assets: files['assets'],
+        objects: [
+          ...(files['assets'] ?? []),
+          ...(files['objects'] ?? []),
+          ...(files['object'] ?? []),
+        ],
+        backgroundUi: files['backgroundUi'],
+        backgrounds: files['backgrounds'],
+        effects: files['effects'],
+        logos: files['logos'],
+        badges: files['badges'],
+        icons: files['icons'],
+        other: files['other'],
       },
     });
 
