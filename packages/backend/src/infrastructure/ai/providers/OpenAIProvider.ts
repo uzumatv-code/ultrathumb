@@ -2,7 +2,8 @@
 // ThumbForge AI — OpenAI Provider
 // =============================================================================
 
-import OpenAI from 'openai';
+import OpenAI, { toFile } from 'openai';
+import type { Uploadable } from 'openai/uploads.js';
 import type {
   AIImageProviderInterface,
   GenerationRequest,
@@ -14,10 +15,11 @@ import { logger } from '../../../shared/utils/logger.js';
 import { AIProviderError } from '../../../shared/errors/AppError.js';
 
 const VISION_MODEL = 'gpt-4o';
-const GENERATION_MODEL = 'dall-e-3'; // Primary; switch to gpt-image-1 when available
+const GENERATION_MODEL = 'gpt-image-1';
 
-// Cost estimates (USD → BRL at ~5.5x, converted to cents)
-const COST_PER_IMAGE_USD = 0.04; // DALL-E 3 standard quality
+// gpt-image-1 medium quality pricing (USD → BRL at ~5.5x, in cents)
+// medium 1536x1024 ≈ $0.042 per image
+const COST_PER_IMAGE_USD = 0.042;
 const BRL_MULTIPLIER = 5.5;
 
 function tocentsCents(usd: number): number {
@@ -99,16 +101,26 @@ Be precise and actionable in your analysis.`,
   async generateVariants(request: GenerationRequest): Promise<AIGenerationResult> {
     const startTime = Date.now();
 
-    // Total variant count: use builtPrompts length or variantsCount
     const count = request.builtPrompts?.length ?? request.variantsCount;
 
-    // Build the fallback prompt (used when no builtPrompts)
+    // Convert image buffers to uploadable files so gpt-image-1 can see them
+    const imageFiles = await this.buildImageFiles(request);
+
     const prompt = this.buildGenerationPrompt(request);
-    logger.info({ generationId: request.generationId, promptLength: prompt.length, variantCount: count }, 'Generating variants');
+    logger.info(
+      {
+        generationId: request.generationId,
+        promptLength: prompt.length,
+        variantCount: count,
+        imageCount: imageFiles.length,
+        model: GENERATION_MODEL,
+      },
+      'Generating variants',
+    );
 
     // Generate variants in parallel
     const variantPromises = Array.from({ length: count }, (_, i) =>
-      this.generateSingleVariant(prompt, i + 1, request),
+      this.generateSingleVariant(prompt, i + 1, request, imageFiles),
     );
 
     const results = await Promise.allSettled(variantPromises);
@@ -135,7 +147,7 @@ Be precise and actionable in your analysis.`,
     return {
       variants,
       modelUsed: GENERATION_MODEL,
-      promptTokens: 0,   // DALL-E doesn't return token counts
+      promptTokens: 0,
       completionTokens: 0,
       estimatedCostCents: totalCost,
       durationMs: Date.now() - startTime,
@@ -143,32 +155,52 @@ Be precise and actionable in your analysis.`,
   }
 
   async generateImagePart(request: ImagePartGenerationRequest): Promise<ImagePartGenerationResult> {
-    const response = await this.client.images.generate({
-      model: GENERATION_MODEL,
-      prompt: request.builtPrompt?.finalPrompt ?? request.prompt,
-      n: 1,
-      size: this.resolveSize(request.width, request.height),
-      quality: 'hd',
-      response_format: 'b64_json',
-      style: 'vivid',
-    });
+    const prompt = request.builtPrompt?.finalPrompt ?? request.prompt;
+    const size = this.resolveSize(request.width, request.height);
 
-    const imageData = response.data?.[0];
-    if (!imageData?.b64_json) {
-      throw new AIProviderError(`No image data returned for ${request.partType}`);
+    let b64: string;
+    let revisedPrompt: string | undefined;
+
+    if (request.referenceImageBuffer) {
+      const imageFile = await toFile(request.referenceImageBuffer, 'reference.png', { type: 'image/png' });
+      // gpt-image-1 images.edit: 'quality' and 'response_format' are not accepted;
+      // the model always returns base64 in data[0].b64_json automatically.
+      const response = await this.client.images.edit({
+        model: GENERATION_MODEL,
+        image: imageFile,
+        prompt,
+        n: 1,
+        size,
+      });
+      const imageData = response.data?.[0];
+      if (!imageData?.b64_json) throw new AIProviderError(`No image data returned for ${request.partType}`);
+      b64 = imageData.b64_json;
+      revisedPrompt = imageData.revised_prompt ?? undefined;
+    } else {
+      const response = await this.client.images.generate({
+        model: GENERATION_MODEL,
+        prompt,
+        n: 1,
+        size,
+        quality: 'medium',
+        response_format: 'b64_json',
+      });
+      const imageData = response.data?.[0];
+      if (!imageData?.b64_json) throw new AIProviderError(`No image data returned for ${request.partType}`);
+      b64 = imageData.b64_json;
+      revisedPrompt = imageData.revised_prompt ?? undefined;
     }
 
     return {
-      imageBuffer: Buffer.from(imageData.b64_json, 'base64'),
-      ...(imageData.revised_prompt ? { revisedPrompt: imageData.revised_prompt } : {}),
+      imageBuffer: Buffer.from(b64, 'base64'),
+      ...(revisedPrompt ? { revisedPrompt } : {}),
       estimatedCostCents: tocentsCents(COST_PER_IMAGE_USD),
       modelUsed: GENERATION_MODEL,
     };
   }
 
   estimateCostCents(request: GenerationRequest): number {
-    // Vision model call + N image generations
-    const visionCost = tocentsCents(0.005); // ~$0.005 for vision analysis
+    const visionCost = tocentsCents(0.005);
     const generationCost = tocentsCents(COST_PER_IMAGE_USD * request.variantsCount);
     return visionCost + generationCost;
   }
@@ -184,99 +216,178 @@ Be precise and actionable in your analysis.`,
 
   // ─── Private Helpers ──────────────────────────────────────────────────────
 
+  /**
+   * Convert all uploaded image buffers into Uploadable files for gpt-image-1.
+   * File names encode the role so the model understands what each image represents.
+   */
+  private async buildImageFiles(request: GenerationRequest): Promise<Uploadable[]> {
+    const files: Uploadable[] = [];
+
+    if (request.referenceImageBuffer) {
+      files.push(
+        await toFile(request.referenceImageBuffer, 'image_1_background_scene.png', { type: 'image/png' }),
+      );
+    }
+    if (request.personImageBuffer) {
+      files.push(
+        await toFile(request.personImageBuffer, 'image_2_person_streamer.png', { type: 'image/png' }),
+      );
+    }
+    if (request.assetBuffers) {
+      for (let i = 0; i < request.assetBuffers.length; i++) {
+        const buf = request.assetBuffers[i];
+        if (buf) {
+          files.push(
+            await toFile(buf, `image_${files.length + 1}_game_asset.png`, { type: 'image/png' }),
+          );
+        }
+      }
+    }
+
+    return files;
+  }
+
   private async generateSingleVariant(
     prompt: string,
     variantIndex: number,
     request: GenerationRequest,
+    imageFiles: Uploadable[],
   ): Promise<AIGenerationResult['variants'][0]> {
-    // Use pre-built prompt if available (from PromptBuilderService)
     const builtPrompt = request.builtPrompts?.[variantIndex - 1];
     const variantSuffixes = [
-      'Make this version bold and impactful.',
-      'Make this version clean and polished.',
-      'Make this version dramatic and cinematic.',
+      '\n\nVariant direction: bold and impactful — high contrast, maximum visual energy.',
+      '\n\nVariant direction: clean and polished — breathing room, premium feel.',
+      '\n\nVariant direction: dramatic and cinematic — moody lighting, film-grade quality.',
     ];
 
     const variantPrompt = builtPrompt
       ? builtPrompt.finalPrompt
-      : `${prompt}\n\n${variantSuffixes[variantIndex - 1] ?? ''}`;
+      : `${prompt}${variantSuffixes[variantIndex - 1] ?? ''}`;
 
-    const response = await this.client.images.generate({
-      model: GENERATION_MODEL,
-      prompt: variantPrompt,
-      n: 1,
-      size: '1792x1024',  // 16:9 closest to 1280x720
-      quality: 'hd',
-      response_format: 'b64_json',
-      style: 'vivid',
-    });
+    let b64: string;
+    let revisedPrompt: string | undefined;
 
-    const imageData = response.data?.[0];
-    if (!imageData?.b64_json) {
-      throw new AIProviderError(`No image data returned for variant ${variantIndex}`);
+    if (imageFiles.length > 0) {
+      // Pass all reference images directly — gpt-image-1 sees them and follows the user's instruction.
+      // gpt-image-1 images.edit: 'quality' and 'response_format' are not accepted;
+      // the model always returns base64 in data[0].b64_json automatically.
+      const response = await this.client.images.edit({
+        model: GENERATION_MODEL,
+        image: imageFiles as Uploadable & Uploadable[],
+        prompt: variantPrompt,
+        n: 1,
+        size: '1536x1024',
+      });
+      const imageData = response.data?.[0];
+      if (!imageData?.b64_json) throw new AIProviderError(`No image data for variant ${variantIndex}`);
+      b64 = imageData.b64_json;
+      revisedPrompt = imageData.revised_prompt ?? undefined;
+    } else {
+      // No reference images — pure text-to-image generation
+      const response = await this.client.images.generate({
+        model: GENERATION_MODEL,
+        prompt: variantPrompt,
+        n: 1,
+        size: '1536x1024',
+        quality: 'medium',
+        response_format: 'b64_json',
+      });
+      const imageData = response.data?.[0];
+      if (!imageData?.b64_json) throw new AIProviderError(`No image data for variant ${variantIndex}`);
+      b64 = imageData.b64_json;
+      revisedPrompt = imageData.revised_prompt ?? undefined;
     }
 
     return {
       index: variantIndex,
-      imageBuffer: Buffer.from(imageData.b64_json, 'base64'),
-      ...(imageData.revised_prompt ? { revisedPrompt: imageData.revised_prompt } : {}),
+      imageBuffer: Buffer.from(b64, 'base64'),
+      ...(revisedPrompt ? { revisedPrompt } : {}),
       ...(builtPrompt ? { variantType: builtPrompt.variantType } : {}),
     };
   }
 
+  /**
+   * Build the generation prompt.
+   *
+   * When the user provides a free-text instruction (the most common case with
+   * reference images), that instruction becomes the PRIMARY directive and the
+   * images are labelled so the model knows what each one represents.
+   * Style analysis is included as secondary context only.
+   *
+   * Without free text, the original analysis-driven prompt is used.
+   */
   private buildGenerationPrompt(request: GenerationRequest): string {
-    const { structuredPrompt, freeTextPrompt } = request;
+    const { freeTextPrompt, referenceImageBuffer, personImageBuffer, assetBuffers, structuredPrompt } = request;
     const analysis = structuredPrompt.referenceAnalysis;
+    const hasImages = !!(referenceImageBuffer || personImageBuffer || assetBuffers?.length);
 
-    const parts: string[] = [
-      `Create a professional YouTube thumbnail image for a content creator.`,
-    ];
+    if (freeTextPrompt) {
+      const parts: string[] = [];
+
+      // Tell the model what each uploaded image represents
+      if (hasImages) {
+        let idx = 1;
+        const labels: string[] = [];
+        if (referenceImageBuffer) labels.push(`image ${idx++} = background/reference scene`);
+        if (personImageBuffer) labels.push(`image ${idx++} = the person/streamer to feature`);
+        if (assetBuffers?.length) {
+          assetBuffers.forEach(() => labels.push(`image ${idx++} = game asset or weapon`));
+        }
+        parts.push(`Images provided: ${labels.join('; ')}.`);
+      }
+
+      // User instruction is the primary directive — placed first, not at the end
+      parts.push(freeTextPrompt);
+
+      // Style analysis as supporting context only
+      if (analysis) {
+        parts.push(
+          `Visual style context: ${analysis.thumbnailStyle} thumbnail, ` +
+          `${analysis.style} aesthetic, ${analysis.glowIntensity} glow, ` +
+          `dominant colors ${analysis.dominantColors.slice(0, 3).join('/')}.`,
+        );
+      }
+
+      parts.push(
+        'Output: professional YouTube thumbnail, 16:9 aspect ratio (1536×1024 px), highly clickable, no watermarks or logos.',
+      );
+
+      return parts.join('\n\n');
+    }
+
+    // No free text: build entirely from analysis
+    const parts: string[] = ['Create a professional YouTube thumbnail for a gaming content creator.'];
 
     if (analysis) {
       parts.push(
-        `Style reference: ${analysis.thumbnailStyle} style thumbnail with ${analysis.style} aesthetic.`,
+        `Style: ${analysis.thumbnailStyle} thumbnail, ${analysis.style} aesthetic.`,
         `Layout: ${analysis.layout} composition.`,
-        `Background: ${analysis.backgroundType} background type.`,
-        `Color scheme: Based on colors ${analysis.dominantColors.join(', ')}.`,
-        `Glow effects: ${analysis.glowIntensity} glow intensity.`,
+        `Background: ${analysis.backgroundType}.`,
+        `Colors: ${analysis.dominantColors.join(', ')}.`,
+        `Glow: ${analysis.glowIntensity} intensity.`,
       );
-
       if (analysis.personPosition !== 'none') {
-        parts.push(`Person positioned at: ${analysis.personPosition}.`);
+        parts.push(`Person at: ${analysis.personPosition}.`);
       }
     }
 
     if (structuredPrompt.personDescription) {
       parts.push(`Person: ${structuredPrompt.personDescription}`);
     }
-
     if (structuredPrompt.assetsDescription?.length) {
-      parts.push(`Include elements: ${structuredPrompt.assetsDescription.join(', ')}.`);
+      parts.push(`Elements: ${structuredPrompt.assetsDescription.join(', ')}.`);
     }
-
     if (structuredPrompt.styleConfig.text) {
-      parts.push(
-        `Text overlay: "${structuredPrompt.styleConfig.text}" in ${structuredPrompt.styleConfig.fontFamily ?? 'bold'} font.`,
-        `Text color: ${structuredPrompt.styleConfig.fontColor ?? 'white'} with ${structuredPrompt.styleConfig.fontOutlineColor ?? 'black'} outline.`,
-      );
+      parts.push(`Text overlay: "${structuredPrompt.styleConfig.text}".`);
     }
 
-    if (freeTextPrompt) {
-      parts.push(`Additional instructions: ${freeTextPrompt}`);
-    }
-
-    parts.push(
-      `The thumbnail must be highly clickable, visually striking, and professional.`,
-      `Aspect ratio: 16:9 (YouTube standard).`,
-      `Do not include any watermarks, logos, or text overlays unless specified.`,
-    );
-
+    parts.push('16:9 aspect ratio, highly clickable, no watermarks.');
     return parts.join(' ');
   }
 
-  private resolveSize(width = 1280, height = 720): '1024x1024' | '1792x1024' | '1024x1792' {
-    if (height > width) return '1024x1792';
-    if (width > height) return '1792x1024';
+  private resolveSize(width = 1536, height = 1024): '1024x1024' | '1536x1024' | '1024x1536' {
+    if (height > width) return '1024x1536';
+    if (width > height) return '1536x1024';
     return '1024x1024';
   }
 }

@@ -122,7 +122,8 @@ export class DownloadExpiredError extends AppError {
 
 export class RateLimitError extends AppError {
   constructor(retryAfterMs: number) {
-    super('RATE_LIMIT_EXCEEDED', 'Too many requests', 429, { retryAfterMs });
+    const retryAfterSec = Math.ceil(retryAfterMs / 1000);
+    super('RATE_LIMIT_EXCEEDED', `Too many requests. Try again in ${retryAfterSec} seconds`, 429, { retryAfterMs });
   }
 }
 

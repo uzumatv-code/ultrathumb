@@ -15,7 +15,7 @@ import { logger } from './shared/utils/logger.js';
 import { connectDatabase, prisma } from './infrastructure/database/client.js';
 import { getRedis } from './infrastructure/cache/redis.js';
 import { storageService } from './infrastructure/storage/StorageService.js';
-import { AppError } from './shared/errors/AppError.js';
+import { AppError, RateLimitError } from './shared/errors/AppError.js';
 
 // Routes
 import { authRoutes } from './modules/auth/auth.routes.js';
@@ -74,13 +74,7 @@ async function buildServer() {
       const user = (request as { user?: { sub?: string } }).user;
       return user?.sub ?? request.ip;
     },
-    errorResponseBuilder: (_request, context) => ({
-      success: false,
-      error: {
-        code: 'RATE_LIMIT_EXCEEDED',
-        message: `Too many requests. Try again in ${Math.ceil(context.ttl / 1000)} seconds`,
-      },
-    }),
+    errorResponseBuilder: (_request, context) => new RateLimitError(context.ttl),
   };
 
   const shouldUseRedisRateLimit =
@@ -188,11 +182,6 @@ async function buildServer() {
         success: false,
         error: { code: 'TOKEN_INVALID', message: 'Invalid token', requestId },
       });
-    }
-
-    // Rate limit errors (handled by plugin)
-    if (reply.statusCode === 429) {
-      return reply.send(error);
     }
 
     // Unexpected errors
